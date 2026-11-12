@@ -16,7 +16,7 @@ jobs:
   unsigned-ipa:
     name: Godot 4.6.3 / unsigned iPhone build
     if: ${{ github.event.repository.private == false }}
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 30
     env:
       GODOT_VERSION: 4.6.3
