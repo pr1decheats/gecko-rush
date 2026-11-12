@@ -20,11 +20,6 @@ jobs:
     timeout-minutes: 30
     env:
       GODOT_VERSION: 4.6.3
-      GODOT_BIN: ${{ runner.temp }}/gecko-rush-ios-tools/Godot.app/Contents/MacOS/Godot
-      GODOT_IOS_TEMPLATE: ${{ runner.temp }}/gecko-rush-ios-tools/templates/ios.zip
-      GECKO_IOS_STAGING_DIR: ${{ runner.temp }}/gecko-rush-ios-source
-      IOS_EXPORT_ROOT: ${{ runner.temp }}/gecko-rush-ios-output
-      IOS_DERIVED_DATA: ${{ runner.temp }}/gecko-rush-ios-derived
     defaults:
       run:
         shell: bash
@@ -33,6 +28,16 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
+      - name: Configure isolated build paths
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "GODOT_BIN=$RUNNER_TEMP/gecko-rush-ios-tools/Godot.app/Contents/MacOS/Godot" \
+            "GODOT_IOS_TEMPLATE=$RUNNER_TEMP/gecko-rush-ios-tools/templates/ios.zip" \
+            "GECKO_IOS_STAGING_DIR=$RUNNER_TEMP/gecko-rush-ios-source" \
+            "IOS_EXPORT_ROOT=$RUNNER_TEMP/gecko-rush-ios-output" \
+            "IOS_DERIVED_DATA=$RUNNER_TEMP/gecko-rush-ios-derived" >> "$GITHUB_ENV"
 
       - name: Download and verify official Godot and export templates
         run: |
