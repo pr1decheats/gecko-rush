@@ -1,0 +1,180 @@
+name: Build unsigned iOS IPA (manual)
+
+# Manual build on a standard GitHub-hosted macOS runner, free in public repos.
+# Never schedule the runner in a private repository: the owner requested $0.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unsigned-ipa:
+    name: Godot 4.6.3 / unsigned iPhone build
+    if: ${{ github.event.repository.private == false }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: 4.6.3
+      GODOT_BIN: ${{ runner.temp }}/gecko-rush-ios-tools/Godot.app/Contents/MacOS/Godot
+      GODOT_IOS_TEMPLATE: ${{ runner.temp }}/gecko-rush-ios-tools/templates/ios.zip
+      GECKO_IOS_STAGING_DIR: ${{ runner.temp }}/gecko-rush-ios-source
+      IOS_EXPORT_ROOT: ${{ runner.temp }}/gecko-rush-ios-output
+      IOS_DERIVED_DATA: ${{ runner.temp }}/gecko-rush-ios-derived
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Read source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Download and verify official Godot and export templates
+        run: |
+          set -euo pipefail
+          tools_dir="$RUNNER_TEMP/gecko-rush-ios-tools"
+          mkdir -p "$tools_dir"
+          release_url="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          macos_zip="$tools_dir/Godot_v${GODOT_VERSION}-stable_macos.universal.zip"
+          templates_tpz="$tools_dir/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          curl --fail --location --retry 3 --output "$macos_zip" "$release_url/Godot_v${GODOT_VERSION}-stable_macos.universal.zip"
+          curl --fail --location --retry 3 --output "$templates_tpz" "$release_url/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          # SHA-256 digests published for the official 4.6.3-stable release assets.
+          printf '%s  %s\n' '30630f3e9b11e10b35c1f90ba8814185dcec43fae1a48345159be7552c64bfe8' "$macos_zip" | shasum -a 256 -c -
+          printf '%s  %s\n' '3fbe2c0e2dec9d537ab9ec97bcf8da91dcf23357fc51f67092dd068d839290a8' "$templates_tpz" | shasum -a 256 -c -
+          unzip -q "$macos_zip" -d "$tools_dir"
+          # No global installation: extract only the iOS template from the TPZ.
+          unzip -q "$templates_tpz" templates/ios.zip -d "$tools_dir"
+          test -x "$GODOT_BIN"
+          test -s "$GODOT_IOS_TEMPLATE"
+          "$GODOT_BIN" --version
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Prepare isolated project and project-only preset
+        run: |
+          set -euo pipefail
+          mkdir -p "$GECKO_IOS_STAGING_DIR" "$IOS_EXPORT_ROOT"
+          git archive HEAD | tar -x -C "$GECKO_IOS_STAGING_DIR"
+          "$GODOT_BIN" --headless --editor --path "$GECKO_IOS_STAGING_DIR" --import
+          "$GODOT_BIN" --headless --path "$GECKO_IOS_STAGING_DIR" --script scripts/ci/export_ios.gd -- --template "$GODOT_IOS_TEMPLATE"
+          "$GODOT_BIN" --headless --path "$GECKO_IOS_STAGING_DIR" --export-release iOS "$IOS_EXPORT_ROOT/GeckoRush.xcodeproj"
+          test -s "$IOS_EXPORT_ROOT/GeckoRush.xcodeproj/project.pbxproj"
+          test -s "$IOS_EXPORT_ROOT/GeckoRush.pck"
+          test -d "$IOS_EXPORT_ROOT/GeckoRush.xcframework"
+          xcodebuild -list -project "$IOS_EXPORT_ROOT/GeckoRush.xcodeproj"
+
+      - name: Build a real iPhone app without signing
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$IOS_EXPORT_ROOT/GeckoRush.xcodeproj" \
+            -scheme GeckoRush \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$IOS_DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            build 2>&1 | tee "$IOS_EXPORT_ROOT/xcodebuild.log"
+
+      - name: Verify Mach-O app and package unsigned IPA
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import plistlib
+          import shutil
+          import subprocess
+          import tempfile
+          import zipfile
+
+          output = Path(os.environ["IOS_EXPORT_ROOT"])
+          products = Path(os.environ["IOS_DERIVED_DATA"]) / "Build" / "Products"
+          apps = [app for app in products.glob("Release-iphoneos/*.app") if (app / "Info.plist").is_file()]
+          if len(apps) != 1:
+              raise SystemExit(f"Expected one built Release-iphoneos app, found {len(apps)}: {apps}")
+          app = apps[0]
+          with (app / "Info.plist").open("rb") as handle:
+              info = plistlib.load(handle)
+          if info.get("CFBundleIdentifier") != "org.geckorush.game":
+              raise SystemExit("Built app has an unexpected bundle identifier")
+          if "iPhoneOS" not in info.get("CFBundleSupportedPlatforms", []):
+              raise SystemExit("Built app is not an iPhoneOS device build")
+          if info.get("CFBundleShortVersionString") != "2.2.0" or info.get("CFBundleVersion") != "4":
+              raise SystemExit("Built app version does not match Gecko Rush 2.2.0 (4)")
+          executable_name = info.get("CFBundleExecutable", "")
+          if not executable_name or Path(executable_name).name != executable_name:
+              raise SystemExit("Built Info.plist has no safe CFBundleExecutable")
+          executable = app / executable_name
+          if not executable.is_file() or not os.access(executable, os.X_OK):
+              raise SystemExit("Built app executable is absent or not executable")
+          file_info = subprocess.check_output(["file", str(executable)], text=True).strip()
+          macho_header = subprocess.check_output(["otool", "-hv", str(executable)], text=True)
+          if "Mach-O" not in file_info or "arm64" not in file_info or "EXECUTE" not in macho_header:
+              raise SystemExit(f"Expected an arm64 Mach-O executable, found: {file_info}\n{macho_header}")
+          if not any(app.rglob("*.pck")):
+              raise SystemExit("Built app contains no Godot game pack")
+          signature = subprocess.run(["codesign", "-dv", str(app)], capture_output=True, text=True)
+          if signature.returncode == 0:
+              raise SystemExit("Expected an unsigned app; a code signature was unexpectedly present")
+
+          ipa = output / "GeckoRush-unsigned.ipa"
+          with tempfile.TemporaryDirectory(prefix="gecko-ipa-", dir=output) as directory:
+              stage = Path(directory)
+              payload = stage / "Payload"
+              payload.mkdir()
+              shutil.copytree(app, payload / app.name, symlinks=True)
+              subprocess.run(["zip", "-qry", str(ipa), "Payload"], cwd=stage, check=True)
+          with zipfile.ZipFile(ipa) as archive:
+              names = set(archive.namelist())
+              prefix = f"Payload/{app.name}/"
+              if prefix + "Info.plist" not in names or prefix + executable_name not in names:
+                  raise SystemExit("IPA is missing its built app, Info.plist or executable")
+              damaged = archive.testzip()
+              if damaged:
+                  raise SystemExit(f"IPA ZIP integrity check failed for {damaged}")
+          digest = hashlib.sha256(ipa.read_bytes()).hexdigest()
+          details = (
+              "Gecko Rush: unsigned iPhoneOS IPA\n"
+              "Version: 2.2.0 (4)\n"
+              f"Source commit: {os.environ.get('GITHUB_SHA', 'unknown')}\n"
+              f"Godot: {os.environ['GODOT_VERSION']}\n"
+              f"Executable: {file_info}\n"
+              f"SHA256: {digest}\n"
+              "No Apple code signature. Sign locally before installation on a normal iPhone.\n"
+          )
+          (output / "build-info.txt").write_text(details, encoding="utf-8")
+          print(details)
+          print(f"Verified package: {ipa.name}, {ipa.stat().st_size} bytes")
+          PY
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: GeckoRush-unsigned-ipa
+          path: |
+            ${{ env.IOS_EXPORT_ROOT }}/GeckoRush-unsigned.ipa
+            ${{ env.IOS_EXPORT_ROOT }}/build-info.txt
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Keep Xcode build log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: GeckoRush-ios-build-log
+          path: ${{ env.IOS_EXPORT_ROOT }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7

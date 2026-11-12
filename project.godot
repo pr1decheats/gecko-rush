@@ -1,0 +1,44 @@
+; Gecko Rush — Godot 4.x / GDScript
+config_version=5
+
+[application]
+config/name="Gecko Rush"
+config/version="2.2.0"
+config/description="Один прыжок. Две стены. Бесконечная высота."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+run/max_fps=60
+config/icon="res://assets/icon.svg"
+
+[autoload]
+L10n="*res://scripts/l10n.gd"
+Progress="*res://scripts/progress.gd"
+Audio="*res://scripts/audio.gd"
+
+[display]
+window/size/viewport_width=1080
+window/size/viewport_height=1920
+window/size/window_width_override=405
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/canvas_textures/default_texture_filter=0
+environment/defaults/default_clear_color=Color(0.04, 0.07, 0.12, 1)
+
+[physics]
+common/physics_ticks_per_second=120
+common/max_physics_steps_per_frame=16
+
+[input_devices]
+pointing/emulate_touch_from_mouse=false
+pointing/emulate_mouse_from_touch=true
+
+[gui]
+theme/default_font_multichannel_signed_distance_field=true
