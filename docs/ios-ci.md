@@ -1,4 +1,40 @@
-# Неподписанная iPhone IPA 2.3 через GitHub Actions
+# Неподписанная iPhone IPA 2.4 через GitHub Actions
+
+**Версия 2.4.0 (6) собрана, независимо скачана и проверена. Выпуск [v2.4.0](https://github.com/pr1decheats/gecko-rush/releases/tag/v2.4.0) опубликован 13 ноября 2026 года в 14:36:46 UTC.** Mac CI успешно выполнил нативную сборку, проверку пакета и Triada Games launch branding; постоянные адреса подтверждены через GitHub API. Публичные APK и IPA повторно скачаны по этим адресам; размеры и SHA-256 совпали.
+
+```text
+Run: https://github.com/pr1decheats/gecko-rush/actions/runs/43442922509
+Build source commit: 46bd604382b9e7518c2c4b13a4b6c42830198629
+Size: 30 200 857
+SHA-256: 6705629fe3d4f45690f15fbf1b22dd2eba36a6fdbb171e93516f4956f9f68c2e
+```
+
+Опубликована прямая загрузка [GeckoRush-2.4-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.4.0/GeckoRush-2.4-unsigned.ipa); Android-пара — [GeckoRush-2.4.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.4.0/GeckoRush-2.4.apk). [Общий статус файлов](builds.md).
+
+## Текущий процесс 2.4
+
+[Workflow](../.github/workflows/ios.yml) остаётся ручным, только для публичного репозитория, на стандартном **`macos-15-intel`**: без платного увеличенного runner, Apple ID и ключей Apple. `contents: write` нужен для создания **черновика** `v2.4.0`; публикация выполняется после независимой проверки, существующий тег/выпуск не перезаписывается.
+
+1. Из `.github/release-assets/android/manifest.json` и частей восстанавливается замороженный подписанный APK 2.4. Проверяются размер и SHA-256 каждой части и целого файла. CI не строит и не переподписывает Android.
+2. Официальные Godot 4.6.3 и экспортные шаблоны проверяются по фиксированным SHA-256. `git archive` создаёт изолированную копию исходников без бинарных частей APK; helper меняет только временный iOS-пресет.
+3. **До `xcodebuild`** проверяются `Launch Screen.storyboard` как XML, `launchScreen=YES`, ровно один `SplashImage` с `scaleAspectFit`, выбранный `UILaunchStoryboardName`, каталоги @2x/@3x и отсутствие незаменённых placeholder. Отдельная Godot-проверка сравнивает пиксели обоих экспортированных PNG с предоставленным логотипом **Triada Games**.
+4. Xcode собирает настоящий Release `iphoneos`, arm64, минимум iOS 14, с `CODE_SIGNING_ALLOWED=NO`, `CODE_SIGNING_REQUIRED=NO` и очищенными данными подписи. Team ID `0000000000` остаётся только placeholder экспортёра во временном пресете.
+5. Настоящий `.app` упаковывается в IPA. [Portable verifier](../.github/verify_mobile.py) проверяет ZIP, метаданные **2.4.0 (6)**, unsigned Mach-O arm64/iOS 14, PCK/MD5, лицензии и побайтовое совпадение всех **12 игровых `.gdc`** с замороженным APK.
+6. Сохраняются стабильные Actions artifacts `GeckoRush-unsigned-ipa` и `GeckoRush-ios-build-log`; черновик содержит versioned IPA/APK, `SHA256SUMS`, `build-info.txt` и инструкцию Sideloadly. Только затем выполняются независимое скачивание, проверка и публикация.
+
+Исходный логотип `assets/triada-games.png`: **1170×1075**, SHA-256 `59f25a432ae2f364524569d1afa703e01fd1632e1684c6d8d3cb52eb55063e84`. Предпросмотр ресурса выполнен; первый Linux boot-кадр не захвачен из-за ещё не отображённого окна Xorg. Проверки XML/пикселей успешно выполнены в CI 43442922509.
+
+## Независимая проверка и публикация
+
+После скачивания проверены SHA-256/CRC и список файлов внешнего Actions-архива, затем [portable verifier](../.github/verify_mobile.py) с `--version 2.4.0 --build 6` дал **PASS**. IPA: `org.geckorush.game`, iPhoneOS/arm64, минимум iOS 14, native Mach-O без подписи Apple; **42 записи PCK с корректными MD5**, лицензии и все **12 игровых `.gdc` побайтно совпадают с APK**. В нативном `Info.plist` подтверждён `Launch Screen`. Размеры и SHA-256 APK/IPA/build-info черновика совпали, после чего выпуск опубликован. Run и build source commit выше относятся к фактически собранному мобильному коду; Size и SHA-256 — к независимо скачанной IPA.
+
+Для установки unsigned IPA нужна локальная подпись через бесплатный Sideloadly на своём Windows/Mac. Apple ID вводится только локально, личный профиль обычно действует семь дней; продлевайте его с тем же Apple ID без удаления игры. Подробная последовательность сохранена ниже. **Физический iPhone 2.4 не проверен**; CI не подтверждает мобильные FPS, звук, safe area или установку.
+
+## Архив: CI и IPA 2.3
+
+Последующие run, commit, размеры и контрольные суммы относятся к историческим выпускам 2.3/2.2.
+
+### Неподписанная iPhone IPA 2.3 через GitHub Actions
 
 Текущий запуск **2.3.0 (5)**: [GitHub Actions 43397179970](https://github.com/pr1decheats/gecko-rush/actions/runs/43397179970), source commit `f6f8983890746740a9a2200f83150fb7e2492246`. **CI завершён успешно; скачанный IPA независимо проверен и опубликован.** Это нативное приложение для физического iPhone arm64, iOS 14+, без подписи Apple.
 
@@ -9,7 +45,7 @@ SHA-256: 410e30c73dd83fb7173865ef433a0cdb7da7d0929aa946ea066bac34ebc9e155
 
 Проверенные файлы опубликованы по постоянным адресам: [GeckoRush-2.3-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.3.0/GeckoRush-2.3-unsigned.ipa) и [GeckoRush-2.3.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.3.0/GeckoRush-2.3.apk). Точный статус и параметры обоих файлов — [builds.md](builds.md).
 
-## Что делает workflow
+#### Что делает workflow
 
 [`.github/workflows/ios.yml`](../.github/workflows/ios.yml) запускается вручную через `workflow_dispatch` на стандартном `macos-15-intel`. Проверка публичности репозитория стоит до выделения Mac. Job ограничен 30 минутами; исходный checkout не получает ключей Apple. В job разрешён `contents: write`, чтобы создать **черновик GitHub Release**; workflow не публикует его автоматически и отказывается перезаписывать существующий релиз или тег.
 
@@ -23,7 +59,7 @@ SHA-256: 410e30c73dd83fb7173865ef433a0cdb7da7d0929aa946ea066bac34ebc9e155
 
 Apple ID, сертификаты Apple, provisioning profile и Android keystore для этой сборки не требуются и не включаются в репозиторий. Пресет iOS в исходниках не получает данные пользовательской подписи. Добавление нативных GDExtension или iOS-плагинов потребует отдельной проверки процесса.
 
-## Повторная сборка и проверка
+#### Повторная сборка и проверка
 
 Для полного workflow используйте Git-клон репозитория: архив исходников Godot не включает замороженные бинарные части APK из `.github/release-assets`.
 
@@ -33,13 +69,13 @@ Apple ID, сертификаты Apple, provisioning profile и Android keystore
 
 Установка, сенсор, звук, safe area и реальные 60/120 FPS на физическом iPhone 2.3 **не проверены**. Признак `CADisableMinimumFrameDurationOnPhone` разрешает высокий лимит кадров на подходящем устройстве, но не подтверждает производительность. Сборка для симулятора не заменяет `iphoneos`.
 
-## Установка с Windows через Sideloadly
+#### Установка с Windows через Sideloadly
 
 Скачайте unsigned IPA на компьютер и откройте её в [Sideloadly](https://sideloadly.io/). Подключите разблокированный iPhone по USB, подтвердите доверие компьютеру, выберите телефон в программе, перетащите IPA, укажите Apple ID локально и нажмите **Start**. При запросе iOS подтвердите профиль в **Настройки → Основные → VPN и управление устройством**; для iOS 16+ может потребоваться **Режим разработчика**.
 
 Unsigned IPA перед установкой должна получить подпись. Бесплатные личные профили обычно действуют семь дней; затем повторите подпись и установку с тем же Apple ID, не удаляя игру. Компьютер нужен для установки и продления подписи, сама игра работает на iPhone отдельно. Apple ID, пароль и коды подтверждения вводятся только в локальный инструмент/интерфейс Apple. Этот процесс не создаёт релиз App Store или TestFlight.
 
-## Архив: проверенная IPA 2.2.0 (4)
+#### Архив: проверенная IPA 2.2.0 (4)
 
 [Запуск 43295517584](https://github.com/pr1decheats/gecko-rush/actions/runs/43295517584) успешно собрал IPA 12 ноября 2026 года на `macos-15-intel`, source commit `0fa8ddcdb156725c6d959d31ba59c58539d67061`. `GeckoRush-2.2-unsigned.ipa`: **27 202 757 байт**.
 

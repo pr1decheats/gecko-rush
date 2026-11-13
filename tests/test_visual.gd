@@ -52,6 +52,7 @@ func _run() -> void:
 	await _capture("eat", 0.055)
 	game.run_time = 62.0
 	await _capture("dawn")
+	game.run_time = 10.0
 	game.center_event = "preview"
 	game.center_elapsed = 0.65
 	game.course.begin_safe_section(4500.0, 11500.0)
