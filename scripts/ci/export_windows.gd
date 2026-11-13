@@ -2,7 +2,7 @@ extends SceneTree
 ## Prepare only an isolated Windows staging copy; the mobile presets stay frozen.
 
 func _initialize() -> void:
-	var staging := OS.get_environment("GECKO_WINDOWS_STAGING_DIR").trim_suffix("/")
+	var staging := OS.get_environment("GECKO_WINDOWS_STAGING_DIR").replace("\\", "/").trim_suffix("/")
 	if staging.is_empty() or ProjectSettings.globalize_path("res://").trim_suffix("/") != staging:
 		push_error("Run only inside the GECKO_WINDOWS_STAGING_DIR source copy")
 		quit(1)

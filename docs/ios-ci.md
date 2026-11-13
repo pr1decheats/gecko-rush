@@ -21,7 +21,7 @@ Android SHA-256: 27ff8128bf9d86dd92e7b52a599e3c154354870dadf215b70e562586efcdbb1
 
 Actions artifacts остаются `GeckoRush-unsigned-ipa` и `GeckoRush-ios-build-log`. Выпуск `v2.5.0` сначала был создан как черновик, затем опубликован после независимого скачивания, сверки размеров/SHA и проверки нового launch branding. Run/build source commit выше относятся к фактически собранному коду; Size/SHA — к независимо скачанной IPA.
 
-Локальная установка unsigned IPA выполняется через Sideloadly на своём Windows/Mac; Apple ID вводится только локально. Физический iPhone 2.5 не проверен. Локальные тесты, Mac CI и независимая проверка IPA завершены. Страница скачивания предлагает ПК (Windows 2.2), Android 2.5 и iPhone 2.5; прямые GitHub-ссылки указаны выше.
+Локальная установка unsigned IPA выполняется через Sideloadly на своём Windows/Mac; Apple ID вводится только локально. Физический iPhone 2.5 не проверен. Локальные тесты, Mac CI и независимая проверка IPA завершены. Windows ZIP, Android APK и iPhone IPA 2.5 опубликованы и независимо проверены; страница скачивания содержит три платформы 2.5.
 
 ## Архив: CI и IPA 2.4
 

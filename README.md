@@ -1,6 +1,6 @@
 # Gecko Rush 2.5 — Android и iPhone
 
-Текущий выпуск — **2.5.0 (7)**, Godot **4.6.3 stable**. Android APK и unsigned iPhone IPA опубликованы после независимого скачивания и проверки. [Размеры, SHA-256 и build source commit](docs/builds.md), [валидация](docs/validation.md).
+Текущий выпуск — **2.5.0 (7)**, Godot **4.6.3 stable**. Windows ZIP, Android APK и unsigned iPhone IPA опубликованы после независимого скачивания и проверки. [Размеры, SHA-256 и build source commit](docs/builds.md), [валидация](docs/validation.md).
 
 ## Правила 2.5
 
@@ -23,11 +23,11 @@
 
  Сосульки увеличены с 20,16×94 до **30,24×110 px**: шире на 50%, длиннее примерно на 17%. Светлая внутренняя грань и тёмно-синий контур находятся внутри видимого многоугольника столкновения; новая геометрия и графика проверены отдельно.
 
-Русский, English и Українська, меню с биомом и тремя статистиками, компактные карточки миров и точные кредиты `pr1de. tg:@ceoVist` / `romantic. tg:@ikdie` сохраняются. [Страница скачивания](https://gecko-rush-godot-6e42.honedgrackle2.chatgpt.site): ПК — Windows 2.2, Android — 2.5, iPhone — 2.5. Прямые GitHub-ссылки приведены ниже.
+Русский, English и Українська, меню с биомом и тремя статистиками, компактные карточки миров и точные кредиты `pr1de. tg:@ceoVist` / `romantic. tg:@ikdie` сохраняются. [Страница скачивания](https://gecko-rush-godot-6e42.honedgrackle2.chatgpt.site): ПК — Windows 2.5, Android — 2.5, iPhone — 2.5. Прямые GitHub-ссылки приведены ниже.
 
 ## Файлы и проверки
 
-Прямые загрузки: [GeckoRush-2.5.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5.apk) — **52 919 978 байт**; [GeckoRush-2.5-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-unsigned.ipa) — **28 229 654 байт**. Все **13 игровых `.gdc`**, включая `boot.gdc`, побайтно совпали между Android/iPhone. После публикации оба публичных файла повторно скачаны: размеры и SHA-256 точно совпали. Windows остаётся прежним **`GeckoRush-2.2-Windows.zip`**.
+Прямые загрузки: [GeckoRush-2.5.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5.apk) — **52 919 978 байт**; [GeckoRush-2.5-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-unsigned.ipa) — **28 229 654 байт**. Все **13 игровых `.gdc`**, включая `boot.gdc`, побайтно совпали между Windows/Android/iPhone. После публикации оба публичных файла повторно скачаны: размеры и SHA-256 точно совпали. **Windows 2.5:** [GeckoRush-2.5-Windows.zip](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-Windows.zip), **37 207 919 байт**, SHA-256 `a3168bed43a06abb4a1b36232f9dd70dbf83378a1bb7e52f7782364757f5ae89`, с теми же игровыми ресурсами 2.5.0 (7). Нативный Windows CI успешно выполнил release EXE headless на 360 кадров; публичный ZIP повторно скачан и сверён по размеру/SHA-256. Для игры распакуйте ZIP и запустите `GeckoRush.exe`, редактор Godot не требуется. [Статус сборки Windows](docs/windows-build.md).
 
 Подтверждён отдельный набор ночи/main/курса: **15 428 проверок, 0 ошибок**. Бот Hard с новой ночью прошёл 12 002 м за 197,93 с и 221 реальный прыжок; это новый результат, прежние 147,84 с остаются в архиве 2.4. После заморозки PNG полный нативный сценарий дал **35 кадров, 0 ошибок**. Локальные boot/branding/графические проверки завершены; Mac CI завершён, IPA независимо проверена. Физические Android/iPhone 2.5 не проверены. [Экспорт](docs/mobile-export.md), [iOS CI](docs/ios-ci.md), [экономика и скорости](docs/economy.md).
 
