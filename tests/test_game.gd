@@ -111,7 +111,7 @@ func _run() -> void:
 	# Deliberately enter a real spike triangle to verify the collision/death pipeline.
 	var spike: Dictionary = {}
 	for hazard: Dictionary in game.course.hazards:
-		if hazard.kind == "spikes" and float(hazard.h) > game.max_height_px:
+		if str(hazard.get("shape", "")) == "spikes" and float(hazard.h) > game.max_height_px:
 			spike = hazard
 			break
 	check(not spike.is_empty(), "course provides a visible wall hazard")

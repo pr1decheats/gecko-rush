@@ -10,6 +10,7 @@ const WALL_RIGHT: float = 810.0
 const PIXEL_SCALE: float = 2.0
 const TILE_HEIGHT: float = 320.0
 const SKY_IMAGE_HEIGHT: int = 1536
+const SCENERY_HEIGHT: int = 1024
 
 var camera_height: float = 0.0
 var viewport_height: float = 1920.0
@@ -159,80 +160,276 @@ func _sky(id: String, palette: Dictionary, night: bool) -> Texture2D:
 	var top := _c(palette, "sky")
 	var bottom := _c(palette, "horizon")
 	for y in range(SKY_IMAGE_HEIGHT):
-		# Small ordered bands/dithering provide dense pixel colour, not a blurry gradient.
+		# Ordered, close colour steps keep the atmosphere crisp at the native pixel grid.
 		var fraction: float = minf(float(y) / 1080.0, 1.0)
-		var tint := top.lerp(bottom, floorf(fraction * 28.0) / 28.0)
+		var tint := top.lerp(bottom, floorf(fraction * 32.0) / 32.0)
 		_rect(image, 0, y, 540, 1, tint)
 		if y % 12 == 0:
 			for x in range(0, 540, 12):
-				_rect(image, x + (y % 24) / 6, y, 2, 1, tint.lightened(0.018))
-	# A crisp, muted skyline remains well behind the active wall hazards.
-	for layer in range(3):
-		var color: Color = _c(palette, ["far", "middle", "near"][layer])
-		var baseline: int = 330 + layer * 190
-		var points: Array[Vector2i] = [Vector2i(0, SKY_IMAGE_HEIGHT)]
-		for index in range(19):
-			var px: int = index * 30
-			var py: int = baseline + int(_noise(index * 23 + layer * 87 + 17) * 105.0)
-			points.append(Vector2i(px, py))
-		points.append(Vector2i(540, SKY_IMAGE_HEIGHT))
-		_polygon(image, points, color)
-		# Thin shelf highlights break up large silhouettes into a more finished pixel scene.
-		for detail in range(22):
-			var x: int = int(_noise(detail * 13 + layer * 31) * 540.0)
-			var y: int = baseline + 140 + int(_noise(detail * 29 + layer * 47) * 490.0)
-			_rect(image, x, y, 9 + detail % 18, 1, color.lightened(0.025))
-	if id == "jungle":
-		for layer in range(2):
-			var tint: Color = _c(palette, "middle" if layer == 0 else "near").lightened(0.035)
-			for index in range(11):
-				var x: int = index * 57 + int(_noise(index + layer * 67) * 25.0)
-				var base: int = 780 + layer * 320 + int(_noise(index * 4 + 13) * 160.0)
-				_jungle_tree(image, x, base, 210 + index % 3 * 55, tint, index * 81)
-	elif id == "ice":
-		for index in range(10):
-			var x: int = index * 63 - 10
-			var y: int = 460 + index % 3 * 62
-			_polygon(image, [Vector2i(x - 45, 970), Vector2i(x + 9, y), Vector2i(x + 75, 970)], _c(palette, "far").lightened(0.12))
-			_polygon(image, [Vector2i(x + 9, y), Vector2i(x - 7, y + 98), Vector2i(x + 31, y + 93)], _c(palette, "light").darkened(0.05))
-		for index in range(9):
-			_conifer(image, index * 73 - 20, 1030 + index % 3 * 72, 130 + index % 4 * 32, _c(palette, "near"))
-	elif id == "canyon":
-		for index in range(8):
-			var x: int = index * 82 - 15
-			var y: int = 470 + index % 3 * 95
-			_rect(image, x, y, 58, 700, _c(palette, "middle"))
-			_rect(image, x - 7, y + 21, 72, 10, _c(palette, "far"))
-			_rect(image, x + 4, y + 74, 49, 3, _c(palette, "far"))
-			_rect(image, x + 4, y + 137, 49, 2, _c(palette, "near"))
-	elif id == "crystal":
-		for index in range(12):
-			var x: int = index * 52 - 20
-			var y: int = 470 + index % 4 * 94
-			_polygon(image, [Vector2i(x - 15, 1320), Vector2i(x, y + 25), Vector2i(x + 14, y), Vector2i(x + 39, 1320)], _c(palette, "middle").lightened(0.04))
-			_line(image, Vector2i(x + 14, y + 5), Vector2i(x + 10, 1140), _c(palette, "near").lightened(0.06))
-	elif id == "volcano":
-		for index in range(7):
-			var x: int = index * 99 - 20
-			_polygon(image, [Vector2i(x - 70, 1280), Vector2i(x + 24, 530 + index % 2 * 125), Vector2i(x + 128, 1280)], _c(palette, "near"))
-			if index % 2 == 0:
-				_line(image, Vector2i(x + 24, 541), Vector2i(x + 35, 670), _c(palette, "accent").darkened(0.38), 2)
-	elif id == "sky":
-		for index in range(12):
-			var at := Vector2i(int(_noise(index * 17 + 4) * 520.0), 250 + index * 80)
-			# Clouds are a separate moving layer, never baked into this skyline.
-			if index % 3 == 0:
-				_rect(image, at.x + 18, at.y + 48, 34, 6, _c(palette, "leaf"))
-				_polygon(image, [at + Vector2i(18, 54), at + Vector2i(52, 54), at + Vector2i(34, 80)], _c(palette, "middle"))
-	if night:
-		for index in range(43):
-			var x: int = 141 + int(_noise(index * 13 + 18) * 262.0)
-			var y: int = 38 + int(_noise(index * 37 + 7) * 535.0)
-			var tint := Color("c8e6df").lerp(Color("7798b5"), _noise(index * 9)).lerp(_c(palette, "sky"), 0.48)
-			_rect(image, x, y, 1 + index % 2, 1 + index % 2, tint)
-			if index % 11 == 0:
-				_rect(image, x - 2, y, 5, 1, tint)
-				_rect(image, x, y - 2, 1, 5, tint)
+				_rect(image, x + (y % 24) / 6, y, 2, 1, tint.lightened(0.014))
+	if id == "ice":
+		# Aurora is an atmospheric ribbon, never a row of triangular mountains.
+		for ribbon in range(3):
+			for x in range(540):
+				var y: int = 136 + ribbon * 33 + int(sin(float(x) * 0.011 + ribbon * 0.7) * 47.0)
+				var tint := top.lerp(_c(palette, "accent"), 0.11 if not night else 0.24)
+				_rect(image, x, y, 1, 4 + ribbon * 2, tint)
+				if x % 5 == 0:
+					_rect(image, x, y + 6, 1, 15, tint.lerp(top, 0.5))
+	if night and id in ["jungle", "canyon", "ice", "sky"]:
+		for index in range(32):
+			var x: int = 12 + int(_noise(index * 13 + 18) * 516.0)
+			var y: int = 24 + int(_noise(index * 37 + 7) * 650.0)
+			var tint := _c(palette, "light").lerp(top, 0.36)
+			_rect(image, x, y, 1 + index % 2, 1, tint)
+	return ImageTexture.create_from_image(image)
+
+func _scenery(id: String, palette: Dictionary, night: bool, layer: int) -> Texture2D:
+	var image := Image.create(540, SCENERY_HEIGHT * 2, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	match id:
+		"jungle": _jungle_scenery(image, palette, layer)
+		"canyon": _canyon_scenery(image, palette, layer)
+		"ice": _ice_scenery(image, palette, layer)
+		"crystal": _crystal_scenery(image, palette, layer)
+		"volcano": _volcano_scenery(image, palette, layer)
+		"sky": _sky_scenery(image, palette, layer, night)
+	# Wrap overflow pixels while rasterising, so a gallery or hanging root that
+	# crosses the tile boundary never develops a moving horizontal cut.
+	var overflow := image.get_region(Rect2i(0, SCENERY_HEIGHT, 540, SCENERY_HEIGHT))
+	image.blend_rect(overflow, Rect2i(0, 0, 540, SCENERY_HEIGHT), Vector2i.ZERO)
+	image.crop(540, SCENERY_HEIGHT)
+	return ImageTexture.create_from_image(image)
+
+func _stone_detail(image: Image, at: Vector2i, width: int, height: int, color: Color, salt: int) -> void:
+	# Close-valued stone chips provide detail without competing with live obstacles.
+	for chip in range(maxi(6, width * height / 170)):
+		var x: int = at.x + int(_noise(salt + chip * 23) * width)
+		var y: int = at.y + int(_noise(salt * 7 + chip * 41) * height)
+		_rect(image, x, y, 2 + chip % 5, 1, color.lightened(0.045) if chip % 3 else color.darkened(0.035))
+
+func _leaf_crown(image: Image, at: Vector2i, width: int, color: Color, salt: int) -> void:
+	for tuft in range(8):
+		var x: int = at.x + tuft * width / 9
+		var y: int = at.y + int(_noise(salt + tuft * 13) * 18.0)
+		_rect(image, x + 4, y - 4, width / 4, 7, color)
+		_rect(image, x, y + 3, width / 3, 11, color)
+		_rect(image, x + 5, y + 14, width / 4, 5, color)
+		_rect(image, x + 5, y + 1, width / 6, 1, color.lightened(0.045))
+		if tuft % 2 == 0:
+			_rect(image, x + 11, y + 19, 2, 8 + tuft, color)
+		for leaf in range(7):
+			var lx: int = x + 3 + int(_noise(salt + tuft * 57 + leaf * 29) * float(width / 4))
+			var ly: int = y + 4 + int(_noise(salt * 3 + leaf * 19 + tuft) * 12.0)
+			_rect(image, lx, ly, 3 + leaf % 4, 1, color.lightened(0.035 + float(leaf % 2) * 0.02))
+			_rect(image, lx + 2, ly + 2, 2, 1, color.darkened(0.025))
+
+func _jungle_scenery(image: Image, palette: Dictionary, layer: int) -> void:
+	var stone := _c(palette, "middle" if layer == 0 else "near")
+	var leaf := stone.lerp(_c(palette, "leaf"), 0.3)
+	if layer == 0:
+		# Continuous trunks, overlapping canopy shelves and aerial roots form a forest.
+		for tree in range(9):
+			var x: int = tree * 69 - 20 + int(_noise(tree * 31) * 16.0)
+			var w: int = 10 + tree % 3 * 6
+			_rect(image, x, 0, w, SCENERY_HEIGHT, stone)
+			_rect(image, x + 3, 0, 2, SCENERY_HEIGHT, stone.lightened(0.025))
+			for tier in range(4):
+				var y: int = 48 + tier * 277 + int(_noise(tree * 17 + tier) * 60.0)
+				_line(image, Vector2i(x + w / 2, y + 68), Vector2i(x - 38, y + 20), stone, 5)
+				_line(image, Vector2i(x + w / 2, y + 71), Vector2i(x + 53, y + 7), stone, 4)
+				_leaf_crown(image, Vector2i(x - 54, y), 118, leaf, tree * 43 + tier)
+				_line(image, Vector2i(x + 45, y + 17), Vector2i(x + 40, y + 88), leaf, 1)
+	else:
+		# Abandoned lintels and broken columns are threaded with roots and ivy.
+		for ruin in range(5):
+			var x: int = -30 + ruin % 3 * 210
+			var y: int = 205 + ruin / 3 * 490 + ruin % 3 * 57
+			var w: int = 133 + ruin % 2 * 20
+			_rect(image, x, y, w, 17, stone)
+			_rect(image, x + 6, y - 7, w - 12, 7, stone.lightened(0.035))
+			_rect(image, x + 6, y + 17, 20, 162, stone)
+			_rect(image, x + w - 27, y + 17, 21, 127 + ruin % 2 * 34, stone)
+			for carving in range(9):
+				_rect(image, x + 9 + carving * 13, y + 5, 7, 5, stone.darkened(0.055))
+				_rect(image, x + 10 + carving * 13, y + 6, 5, 1, stone.lightened(0.03))
+			for seam in range(5):
+				_rect(image, x + 7, y + 28 + seam * 29, 19, 2, stone.darkened(0.05))
+				_rect(image, x + w - 26, y + 24 + seam * 27, 20, 1, stone.darkened(0.055))
+			_stone_detail(image, Vector2i(x + 7, y + 20), 17, 150, stone, ruin * 19)
+			_leaf_crown(image, Vector2i(x - 7, y - 20), w, leaf, ruin * 71)
+			for vine in range(6):
+				var vx: int = x + 12 + vine * 22
+				var vy: int = y + 10
+				_line(image, Vector2i(vx, vy), Vector2i(vx - 4 + vine % 3 * 4, vy + 38 + vine % 3 * 18), leaf, 1)
+				_rect(image, vx - 3, vy + 16, 3, 2, leaf.lightened(0.04))
+				_rect(image, vx + 1, vy + 27, 4, 2, leaf)
+			_line(image, Vector2i(x + 13, y + 87), Vector2i(x + 55, y + 147), leaf, 3)
+			_line(image, Vector2i(x + 55, y + 147), Vector2i(x + 91, y + 159), leaf, 2)
+
+func _mesa(image: Image, at: Vector2i, width: int, height: int, color: Color, salt: int, arch: bool) -> void:
+	var x: int = at.x
+	var y: int = at.y
+	_polygon(image, [Vector2i(x + 15, y), Vector2i(x + width - 22, y), Vector2i(x + width - 18, y + 15), Vector2i(x + width - 7, y + 15), Vector2i(x + width - 7, y + 64), Vector2i(x + width, y + 94), Vector2i(x + width - 8, y + height), Vector2i(x + 4, y + height), Vector2i(x, y + 86), Vector2i(x + 9, y + 54), Vector2i(x + 9, y + 14), Vector2i(x + 15, y + 14)], color)
+	for band in range(12):
+		var by: int = y + 13 + band * (height - 24) / 12
+		var inset: int = 10 if band < 3 else 6
+		_rect(image, x + inset, by, width - inset * 2, 2 + band % 3, color.lightened(0.03) if band % 3 else color.darkened(0.055))
+		_rect(image, x + inset + 4 + band % 4 * 7, by + 4, width / 3, 1, color.lightened(0.04))
+	_stone_detail(image, Vector2i(x + 13, y + 16), width - 30, height - 25, color, salt)
+	if arch:
+		# A stepped opening cuts through sandstone, revealing the farther scene.
+		var cx: int = x + width / 2
+		var roof: int = y + height / 3
+		_polygon(image, [Vector2i(cx - width / 5, y + height + 1), Vector2i(cx - width / 5, roof + 31), Vector2i(cx - width / 7, roof + 10), Vector2i(cx - 6, roof), Vector2i(cx + 9, roof), Vector2i(cx + width / 6, roof + 15), Vector2i(cx + width / 5, roof + 40), Vector2i(cx + width / 5, y + height + 1)], Color.TRANSPARENT)
+
+func _canyon_scenery(image: Image, palette: Dictionary, layer: int) -> void:
+	var stone := _c(palette, "far" if layer == 0 else "middle")
+	for mesa in range(7 if layer == 0 else 4):
+		var x: int = -48 + mesa % 4 * 175 + int(_noise(mesa * 19 + layer) * 25.0)
+		var y: int = 46 + mesa / 4 * 500 + mesa % 4 * 75 + layer * 139
+		var width: int = 125 + mesa % 3 * 25
+		_mesa(image, Vector2i(x, y), width, 284 + mesa % 3 * 67, stone, mesa * 97, layer == 1 or mesa % 3 == 0)
+		if layer == 1:
+			# Wind-scoured ledges, not vegetation-covered mountain peaks.
+			_rect(image, x - 4, y + 11, width + 8, 4, stone.lightened(0.065))
+			for crack in range(4):
+				var p := Vector2i(x + 28 + crack * 24, y + 29)
+				_line(image, p, p + Vector2i(4, 27 + crack * 8), stone.darkened(0.08))
+				_line(image, p + Vector2i(4, 27 + crack * 8), p + Vector2i(-2, 42 + crack * 8), stone.darkened(0.08))
+
+func _ice_spire(image: Image, at: Vector2i, width: int, height: int, color: Color, hanging: bool = false) -> void:
+	var tip: int = -height if not hanging else height
+	if height > 120 and not hanging:
+		# Tall frozen columns have broken flat caps, distinct from alpine peaks.
+		_polygon(image, [at + Vector2i(-width / 2, 0), at + Vector2i(-width / 2 + 6, tip + 21), at + Vector2i(-width / 5, tip + 7), at + Vector2i(-width / 6, tip), at + Vector2i(width / 4, tip + 4), at + Vector2i(width / 2 - 5, tip + 28), at + Vector2i(width / 2, 0)], color)
+		_rect(image, at.x - width / 6, at.y + tip + 3, width * 2 / 5, 2, color.lightened(0.065))
+	else:
+		_polygon(image, [at + Vector2i(-width / 2, 0), at + Vector2i(-width / 3, tip * 3 / 4), at + Vector2i(0, tip), at + Vector2i(width / 4, tip * 4 / 5), at + Vector2i(width / 2, 0)], color)
+	_polygon(image, [at + Vector2i(0, tip), at + Vector2i(width / 4, tip * 4 / 5), at + Vector2i(width / 2, 0), at + Vector2i(3, 0)], color.lightened(0.045))
+	_line(image, at + Vector2i(0, tip + (5 if not hanging else -5)), at + Vector2i(3, -6 if not hanging else 6), color.lightened(0.075))
+	for fracture in range(3):
+		var p := at + Vector2i(-width / 4 + fracture * width / 6, tip / 5 - fracture * tip / 5)
+		_line(image, p, p + Vector2i(width / 5, tip / 12), color.lightened(0.06))
+
+func _ice_scenery(image: Image, palette: Dictionary, layer: int) -> void:
+	var ice := _c(palette, "far" if layer == 0 else "middle")
+	if layer == 0:
+		for pillar in range(12):
+			var x: int = -15 + pillar % 6 * 109
+			var y: int = 465 + pillar / 6 * 540 + pillar % 3 * 32
+			_ice_spire(image, Vector2i(x, y), 65 + pillar % 3 * 14, 270 + pillar % 4 * 51, ice)
+			_rect(image, x - 34, y, 70, 3, ice.lightened(0.065))
+	else:
+		# Frozen galleries: horizontal ice roofs, descending teeth and fractured columns.
+		for shelf in range(4):
+			var y: int = 56 + shelf * 286
+			var x: int = -15 if shelf % 2 == 0 else 312
+			_rect(image, x, y, 245, 12, ice)
+			_rect(image, x + 12, y - 7, 210, 7, ice.lightened(0.035))
+			for tooth in range(7):
+				_ice_spire(image, Vector2i(x + 17 + tooth * 33, y + 12), 20 + tooth % 3 * 9, 23 + tooth % 4 * 20, ice, true)
+			_ice_spire(image, Vector2i(x + 73, y + 259), 59, 212, ice.darkened(0.035))
+			_line(image, Vector2i(x + 57, y + 96), Vector2i(x + 79, y + 125), ice.lightened(0.07))
+
+func _gem(image: Image, at: Vector2i, width: int, height: int, color: Color) -> void:
+	_polygon(image, [at + Vector2i(-width / 2, 0), at + Vector2i(-width / 2, -height * 3 / 4), at + Vector2i(0, -height), at + Vector2i(width / 2, -height * 3 / 4), at + Vector2i(width / 2, 0)], color)
+	_polygon(image, [at, at + Vector2i(0, -height), at + Vector2i(width / 2, -height * 3 / 4), at + Vector2i(width / 2, 0)], color.lightened(0.06))
+	_line(image, at + Vector2i(0, -height + 4), at + Vector2i(0, -3), color.lightened(0.09))
+	_line(image, at + Vector2i(-width / 2 + 2, -height * 3 / 4), at + Vector2i(0, -height * 2 / 3), color.darkened(0.045))
+
+func _crystal_scenery(image: Image, palette: Dictionary, layer: int) -> void:
+	var stone := _c(palette, "far" if layer == 0 else "middle")
+	var gem := stone.lerp(_c(palette, "leaf_light"), 0.32)
+	for arch in range(4):
+		var x: int = -52 + arch % 2 * 315 + layer * 41
+		var y: int = 83 + arch / 2 * 574 + arch % 2 * 116
+		if layer == 0:
+			# Interlocking subterranean ribs, hollow geodes and stalactite ceilings.
+			_polygon(image, [Vector2i(x, y + 350), Vector2i(x + 13, y + 77), Vector2i(x + 58, y + 21), Vector2i(x + 97, y), Vector2i(x + 162, y), Vector2i(x + 220, y + 46), Vector2i(x + 245, y + 141), Vector2i(x + 260, y + 350), Vector2i(x + 221, y + 350), Vector2i(x + 208, y + 147), Vector2i(x + 188, y + 79), Vector2i(x + 151, y + 47), Vector2i(x + 100, y + 42), Vector2i(x + 63, y + 67), Vector2i(x + 46, y + 126), Vector2i(x + 35, y + 350)], stone)
+			for tooth in range(7):
+				var p := Vector2i(x + 50 + tooth * 24, y + 46 + absi(3 - tooth) * 8)
+				_polygon(image, [p, p + Vector2i(13, 1), p + Vector2i(6, 18 + tooth % 3 * 13)], stone)
+			_stone_detail(image, Vector2i(x + 12, y + 138), 20, 205, stone, arch * 63)
+		else:
+			var base := Vector2i(183 + arch % 2 * 143, y + 225)
+			_polygon(image, [base + Vector2i(-48, 11), base + Vector2i(-43, -12), base + Vector2i(-17, -27), base + Vector2i(35, -22), base + Vector2i(58, 4), base + Vector2i(43, 18)], stone)
+			for crystal in range(7):
+				var tint: Color = gem if crystal % 3 else gem.lerp(Color("8c78a1"), 0.24)
+				_gem(image, base + Vector2i(-36 + crystal * 13, -6), 12 + crystal % 3 * 4, 29 + crystal % 4 * 19, tint)
+			# Short faceted seams describe a geode rather than a celestial skyline.
+			for vein in range(3):
+				_line(image, base + Vector2i(-31 + vein * 21, 13), base + Vector2i(-11 + vein * 21, 7), gem.darkened(0.08))
+
+func _volcano_scenery(image: Image, palette: Dictionary, layer: int) -> void:
+	var stone := _c(palette, "far" if layer == 0 else "near")
+	var lava := stone.lerp(_c(palette, "accent"), 0.25 if layer == 0 else 0.30)
+	for shelf in range(4):
+		var x: int = -42 + shelf % 2 * 315
+		var y: int = 64 + shelf / 2 * 578 + shelf % 2 * 146 + layer * 93
+		var width: int = 283 if layer == 0 else 194
+		var height: int = 235 if layer == 0 else 176
+		# Hexagonal basalt columns terminate in a broken horizontal escarpment.
+		for column in range(width / 21):
+			var cy: int = y + int(_noise(column * 39 + shelf * 57) * 40.0)
+			var cx: int = x + column * 21
+			_polygon(image, [Vector2i(cx, cy + 5), Vector2i(cx + 10, cy), Vector2i(cx + 20, cy + 6), Vector2i(cx + 20, y + height), Vector2i(cx + 1, y + height - 4)], stone)
+			_rect(image, cx + 2, cy + 9, 2, y + height - cy - 17, stone.lightened(0.035))
+			_rect(image, cx + 18, cy + 8, 2, y + height - cy - 10, stone.darkened(0.045))
+			for seam in range(3):
+				_rect(image, cx + 3, cy + 28 + seam * 43, 14, 1, stone.darkened(0.055))
+		var vent := Vector2i(x + width / 2, y + height - 35)
+		_line(image, vent + Vector2i(-width / 3, 0), vent + Vector2i(-7, 9), lava.darkened(0.07), 3)
+		_line(image, vent + Vector2i(-7, 9), vent + Vector2i(width / 3, 3), lava, 2)
+		if layer == 1:
+			_line(image, vent + Vector2i(8, 5), vent + Vector2i(1, 39), lava, 2)
+			_line(image, vent + Vector2i(1, 39), vent + Vector2i(9, 64), lava.darkened(0.1), 1)
+			for smoke in range(4):
+				_cloud(image, vent + Vector2i(-28 + smoke % 2 * 9, -34 - smoke * 31), 48 + smoke * 11, stone.lightened(0.045))
+
+func _sky_scenery(image: Image, palette: Dictionary, layer: int, night: bool) -> void:
+	var cloud := _c(palette, "far" if layer == 0 else "middle")
+	var stone := _c(palette, "near")
+	if layer == 0:
+		# Broad cloud banks and storm undersides have no solid mountain silhouette.
+		for bank in range(8):
+			var x: int = -75 + bank % 3 * 223
+			var y: int = 71 + bank / 3 * 359 + bank % 3 * 74
+			_cloud(image, Vector2i(x, y), 215 + bank % 3 * 34, cloud)
+			_cloud(image, Vector2i(x + 28, y + 13), 182, cloud.darkened(0.035))
+			_rect(image, x + 40, y + 3, 96, 1, cloud.lightened(0.04))
+			if night:
+				_rect(image, x + 71, y + 28, 77, 2, cloud.lightened(0.025))
+	else:
+		for island in range(6):
+			var x: int = -45 + island % 3 * 217
+			var y: int = 186 + island / 3 * 551 + island % 3 * 101
+			var width: int = 97 + island % 3 * 19
+			_polygon(image, [Vector2i(x, y), Vector2i(x + width, y), Vector2i(x + width - 8, y + 18), Vector2i(x + width / 2 + 12, y + 41), Vector2i(x + width / 2, y + 76), Vector2i(x + width / 2 - 13, y + 41), Vector2i(x + 9, y + 20)], stone)
+			_rect(image, x - 3, y - 6, width + 6, 7, stone.lerp(_c(palette, "leaf"), 0.3))
+			_rect(image, x + 5, y + 8, width - 10, 2, stone.lightened(0.045))
+			for pillar in range(3):
+				var px: int = x + 17 + pillar * 26
+				_rect(image, px, y - 58 + pillar % 2 * 6, 9, 52 - pillar % 2 * 6, stone)
+				_rect(image, px - 3, y - 62 + pillar % 2 * 6, 15, 5, stone.lightened(0.04))
+				_rect(image, px + 2, y - 54 + pillar % 2 * 6, 1, 42 - pillar % 2 * 6, stone.lightened(0.07))
+			_rect(image, x + 11, y - 68, 83, 5, stone)
+			_rect(image, x + 19, y - 73, 67, 5, stone.lightened(0.025))
+			# Hanging chain remnants reinforce the airborne architecture.
+			for link in range(10):
+				_rect(image, x + width - 11 + link % 2, y + 19 + link * 5, 2, 3, stone.lightened(0.035))
+			_cloud(image, Vector2i(x - 24, y + 42), width + 42, cloud)
+
+func _cloud_texture(palette: Dictionary, id: String) -> Texture2D:
+	var image := Image.create(170, 55, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	var tint := _c(palette, "light").lerp(_c(palette, "far"), 0.6)
+	if id == "volcano":
+		tint = _c(palette, "far")
+	_cloud(image, Vector2i(8, 22), 148, tint)
+	_cloud(image, Vector2i(30, 13), 95, tint.lightened(0.025))
+	_rect(image, 40, 15, 37, 1, tint.lightened(0.05))
+	_rect(image, 17, 37, 123, 2, tint.darkened(0.04))
 	return ImageTexture.create_from_image(image)
 
 func _brick(image: Image, at: Vector2i, width: int, height: int, palette: Dictionary, salt: int) -> void:
@@ -379,14 +576,23 @@ func _orb(palette: Dictionary, moon: bool) -> Texture2D:
 func _build_world(id: String) -> Dictionary:
 	var day: Dictionary = PALETTES[id]
 	var night: Dictionary = NIGHT_PALETTES[id]
+	var backdrop_day := _background_palette(day, false)
+	var backdrop_night := _background_palette(night, true)
 	var walls_day: Array[Texture2D] = []
 	var walls_night: Array[Texture2D] = []
+	var scenery_day: Array[Texture2D] = []
+	var scenery_night: Array[Texture2D] = []
 	for variant in range(4):
 		walls_day.append(_wall_tile(id, day, variant))
 		walls_night.append(_wall_tile(id, night, variant))
+	for layer in range(2):
+		scenery_day.append(_scenery(id, backdrop_day, false, layer))
+		scenery_night.append(_scenery(id, backdrop_night, true, layer))
 	return {
-		"sky_day": _sky(id, _background_palette(day, false), false),
-		"sky_night": _sky(id, _background_palette(night, true), true),
+		"sky_day": _sky(id, backdrop_day, false),
+		"sky_night": _sky(id, backdrop_night, true),
+		"scenery_day": scenery_day, "scenery_night": scenery_night,
+		"cloud_day": _cloud_texture(backdrop_day, id), "cloud_night": _cloud_texture(backdrop_night, id),
 		"wall_day": walls_day, "wall_night": walls_night,
 		"ground_day": [_ground(id, day, 0), _ground(id, day, 1)],
 		"ground_night": [_ground(id, night, 0), _ground(id, night, 1)],
@@ -445,26 +651,38 @@ func _draw_background(blend: float) -> void:
 		draw_texture_rect_region(_active["sky_day"], target, source, _theme_modulate())
 	if blend > 0.001:
 		draw_texture_rect_region(_active["sky_night"], target, source, Color(1.0, 1.0, 1.0, blend))
-	# Celestial sprites and a restrained, moving cloud shelf provide parallax.
+	# Celestial sprites stay behind the biome architecture and canopy.
 	var orb_y: float = 230.0 + sin(time * 0.025) * 14.0 + minf(camera_height * 0.0005, 26.0)
-	if world_id not in ["crystal", "volcano"]:
+	if world_id in ["jungle", "canyon", "sky"]:
 		if blend < 0.999:
-			draw_texture_rect(_active["sun"], Rect2(616, orb_y, 160, 160), false, Color(1, 1, 1, (1.0 - blend) * 0.43))
+			draw_texture_rect(_active["sun"], Rect2(616, orb_y, 132, 132), false, Color(1, 1, 1, (1.0 - blend) * 0.28))
 		if blend > 0.001:
-			draw_texture_rect(_active["moon"], Rect2(614, orb_y, 160, 160), false, Color(1, 1, 1, blend * 0.62))
-	var cloud_count: int = 8 if world_id == "sky" else 4
-	var cloud_span: float = viewport_height + 220.0
+			draw_texture_rect(_active["moon"], Rect2(614, orb_y, 132, 132), false, Color(1, 1, 1, blend * 0.46))
+	# Two independently scrolling, seamless-height cached scenes provide depth.
+	# Only these texture placements happen in a frame; all pixels are built once.
+	var span: float = float(SCENERY_HEIGHT) * PIXEL_SCALE
+	for layer in range(2):
+		var speed: float = 0.009 if layer == 0 else 0.022
+		var drift: float = time * (1.1 if world_id == "sky" else 0.16) * float(layer + 1)
+		var offset: float = fposmod(camera_height * speed + drift, span)
+		for tile in range(-1, int(ceil(viewport_height / span)) + 1):
+			var area := Rect2(0, float(tile) * span + offset, LOGICAL_WIDTH, span)
+			_draw_pair(_active["scenery_day"][layer], _active["scenery_night"][layer], area, blend, _theme_modulate())
+	_draw_atmosphere(blend)
+
+func _draw_atmosphere(blend: float) -> void:
+	if world_id == "crystal":
+		return
+	var cloud_count: int = 7 if world_id == "sky" else 3
+	var cloud_span: float = viewport_height + 240.0
 	for index in range(cloud_count):
 		var x: float = fposmod(float(index) * 307.0 + 67.0, 1000.0) - 90.0 + sin(time * 0.035 + index) * 28.0
-		# Positive parallax scrolls downward with the climb. Wrap only after the
-		# entire cloud has left the viewport, avoiding the old on-screen jump.
-		var travel: float = time * (7.0 + float(index % 3)) + camera_height * 0.012
-		var y: float = fposmod(float(index) * cloud_span / float(cloud_count) + travel, cloud_span) - 110.0
-		var tint: Color = Color("c6d0bc").lerp(Color("587083"), blend)
-		tint.a = 0.10 if world_id != "sky" else 0.18
-		draw_rect(Rect2(x + 20, y, 132, 10), tint)
-		draw_rect(Rect2(x, y + 10, 184, 16), tint)
-		draw_rect(Rect2(x + 32, y + 26, 126, 8), tint)
+		# Clouds move down with climbing and wrap while fully outside the view.
+		var travel: float = time * (5.0 + float(index % 3)) + camera_height * (0.026 if world_id == "sky" else 0.016)
+		var y: float = fposmod(float(index) * cloud_span / float(cloud_count) + travel, cloud_span) - 120.0
+		var tint := _theme_modulate()
+		tint.a = 0.32 if world_id == "sky" else 0.16
+		_draw_pair(_active["cloud_day"], _active["cloud_night"], Rect2(x, y, 340, 110), blend, tint)
 
 func _draw_wall(reflected: bool, blend: float) -> void:
 	var visibility: float = clampf(side_walls_visibility, 0.0, 1.0)
@@ -505,6 +723,12 @@ func _draw_particles(blend: float) -> void:
 			draw_rect(Rect2(x - 2, y + 2, 7, 2), tint)
 		return
 	var ambient: Color = Color("dfdf98").lerp(Color("b2edc3"), blend)
+	if world_id == "volcano":
+		ambient = Color("d29d71").lerp(Color("da9c69"), blend)
+	elif world_id == "crystal":
+		ambient = Color("90bfc1").lerp(Color("9fdbcc"), blend)
+	elif world_id == "canyon":
+		ambient = Color("d4b499").lerp(Color("ae9ca7"), blend)
 	for index in range(10):
 		var x: float = 280.0 + _noise(index * 29 + 5) * 520.0 + sin(time * 0.35 + index) * 10.0
 		var y: float = fposmod(_noise(index * 13 + 1) * viewport_height - time * (4 + index % 3) + camera_height * 0.035, viewport_height)

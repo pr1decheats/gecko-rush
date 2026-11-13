@@ -4,6 +4,9 @@ var language := "ru"
 var _keys: Array = []
 var _cache: Dictionary = {}
 const EN := {
+"Лёгкий":"Easy", "Обычный":"Normal", "Сложный":"Hard", "Эксперт":"Expert", "Кошмар":"Nightmare", "Безумие":"Insane", "Каньон":"Canyon", "Лёд":"Ice", "Кристаллы":"Crystals", "Небо":"Sky",
+"СЛОЖНОСТЬ":"DIFFICULTY", "Сложнее забеги — больше XP. Для открытия нужны уровень и рекорд забега в предыдущей сложности.":"Harder runs earn more XP. Unlock each difficulty with a level and a single-run best in the previous difficulty.", "На указанном уровне забеги становятся тренировочными: без XP. Выбирай следующую сложность для роста.":"At the listed level, runs become practice runs with no XP. Choose the next difficulty to keep levelling up.",
+"XP ×%s · до уровня %d":"XP ×%s · up to level %d", "XP ×%s · без ограничения уровня":"XP ×%s · no level limit", "Тренировка · XP за забег: 0":"Practice · run XP: 0", "Темп: %s → %s м/с":"Pace: %s → %s m/s", "Максимальный темп: с %s м":"Full pace at %s m", "Нужен уровень %d · сейчас %d":"Level %d required · current %d", "Рекорд мира «%s»: %s / %s м":"Single-run best on %s: %s / %s m", "Далее: «%s» · уровень %d":"Next: %s · level %d", "Для XP выбери: «%s»":"For XP, choose %s", "ОТКРЫТО":"UNLOCKED", "ЗАКРЫТО":"LOCKED",
 "ПОСЛЕДНИЙ\nЗАБЕГ":"LAST\nRUN", "РЕКОРД\nЗАБЕГА":"BEST\nRUN", "ВСЕГО\nПРОЙДЕНО":"TOTAL\nDISTANCE",
 "ИГРАТЬ":"PLAY", "ПРОДОЛЖИТЬ":"CONTINUE", "ЕЩЁ РАЗ":"TRY AGAIN", "ГЛАВНОЕ МЕНЮ":"MAIN MENU", "Главное меню":"Main menu", "В ГЛАВНОЕ МЕНЮ":"BACK TO MENU", "ЗАВЕРШИТЬ И В МЕНЮ":"FINISH & MENU", "НОВЫЙ ЗАБЕГ":"NEW RUN", "МАГАЗИН":"SHOP", "ПРОФИЛЬ":"PROFILE", "ЗАДАНИЯ":"QUESTS", "НАСТРОЙКИ":"SETTINGS", "Настройки":"Settings", "Пауза":"Pause", "ПЕРЕДЫШКА":"PAUSED", "ГОТОВО":"DONE", "ВКЛ.":"ON", "ВЫКЛ.":"OFF", "В ПРОЦЕССЕ":"IN PROGRESS", "ПОЛУЧЕНО":"CLAIMED", "ВЫБРАН":"SELECTED", "ВЫБРАТЬ":"SELECT", "ОПЫТ":"EXPERIENCE", "МОНЕТЫ":"COINS", "НОВЫЙ РЕКОРД!":"NEW BEST!", "НОВЫЙ УРОВЕНЬ!":"LEVEL UP!", "ОТЛИЧНЫЙ ПОДЪЁМ":"NICE CLIMB", "ЛИЧНЫЙ РЕКОРД":"PERSONAL BEST", "ЛУЧШИЙ РЕКОРД":"BEST HEIGHT", "ВСЕГО ПРОЙДЕНО":"TOTAL DISTANCE", "ЗАБЕГОВ":"RUNS", "МОНЕТ ЗА ВСЁ ВРЕМЯ":"LIFETIME COINS", "ТВОИ МИРЫ":"YOUR WORLDS", "ДОСТИЖЕНИЯ":"ACHIEVEMENTS", "УРОВЕНЬ":"LEVEL", "УР.":"LV.", "Рекорд:":"Best:", "Сейчас:":"Current:", "Новое достижение:":"Achievement unlocked:", "XP до следующего уровня":"XP to next level",
 "ВЫШЕ С КАЖДЫМ ПРЫЖКОМ":"HIGHER WITH EVERY JUMP", "ОДНО КАСАНИЕ — ЦЕЛЫЙ МИР":"ONE TAP. A WHOLE WORLD.", "КАСАНИЕ — ПРЫЖОК":"TAP TO JUMP", "Одно касание. Бесконечная высота.":"One tap. Endless heights.", "Каждый забег оставляет след":"Every run leaves a mark", "Высота подождёт.":"The heights can wait.", "При закрытии игры забег сохранится для продолжения.":"Close the game and resume this run later.", "Стандартный зелёный геккон":"Original green gecko", "Сохранённый забег недоступен":"Saved run is unavailable",
@@ -24,6 +27,11 @@ func set_language(value: String) -> void:
 		language = selected
 		_cache.clear()
 		changed.emit()
+
+# Translate the whole sentence before substituting values. Dynamic names and
+# numbers then never rely on partial-word replacements or a number-specific regex.
+func format_text(source: String, values: Array) -> String:
+	return text(source) % values
 
 func text(source: String) -> String:
 	if language == "ru" or source.is_empty():

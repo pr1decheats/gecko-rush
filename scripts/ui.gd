@@ -418,17 +418,20 @@ func show_menu() -> void:
 	title_group.add_child(_label("ВЫШЕ С КАЖДЫМ ПРЫЖКОМ", 24, Color("567854"), true, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var record_group := VBoxContainer.new()
+	record_group.name = "MenuRunSummary"
 	_content.add_child(record_group)
 	record_group.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	record_group.offset_left = 170
-	record_group.offset_right = -170
-	record_group.offset_top = _safe_top + 680
-	record_group.offset_bottom = _safe_top + 1015
+	record_group.offset_left = 140
+	record_group.offset_right = -140
+	record_group.offset_top = _safe_top + 640
+	record_group.offset_bottom = _safe_top + 1220
 	record_group.add_theme_constant_override("separation", 10)
 	record_group.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var world := Progress.current_world()
-	var world_button := _button(str(world.get("name", "Джунгли")).to_upper() + "   ›", "profile", null, 70, false, 25)
+	var world_button := _button(str(world.get("name", "Лёгкий")).to_upper() + "   ›", "profile", null, 70, false, 25)
+	world_button.name = "MenuDifficulty"
 	record_group.add_child(world_button)
+	_menu_world_info(record_group, world)
 	var distance_row := _row(record_group, 14)
 	distance_row.name = "RunDistanceCards"
 	distance_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -439,6 +442,7 @@ func show_menu() -> void:
 	_menu_distance_card(distance_row, "TotalRunDistance", distances.total, "ВСЕГО\nПРОЙДЕНО", card_size)
 
 	var bottom := VBoxContainer.new()
+	bottom.name = "MenuActions"
 	_content.add_child(bottom)
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_left = 88
@@ -457,6 +461,62 @@ func show_menu() -> void:
 		nav.add_child(_button(str(entry[0]), str(entry[1]), null, 92, false, 25))
 	bottom.add_child(_label("ОДНО КАСАНИЕ — ЦЕЛЫЙ МИР", 21, Color(1, 0.97, 0.84, 0.80), false, HORIZONTAL_ALIGNMENT_CENTER))
 	fade_in(0.35)
+
+
+func _world_name(id: String) -> String:
+	for item: Dictionary in Progress.WORLDS:
+		if str(item.get("id", "")) == id:
+			return L10n.text(str(item.get("name", "")))
+	return ""
+
+
+func _decimal(value: float, digits: int = 2) -> String:
+	var result := ("%." + str(digits) + "f") % value
+	while result.ends_with("0") and result.contains("."):
+		result = result.left(-1)
+	result = result.trim_suffix(".")
+	return result.replace(".", ",") if L10n.language == "ru" else result
+
+
+func _world_xp_text(id: String) -> String:
+	var status: Dictionary = Progress.world_xp_status(id)
+	var multiplier := _decimal(float(status.get("multiplier", 1.0)))
+	var cap := int(status.get("cap_level", 0))
+	if cap > 0:
+		return L10n.format_text("XP ×%s · до уровня %d", [multiplier, cap])
+	return L10n.format_text("XP ×%s · без ограничения уровня", [multiplier])
+
+
+func _world_record_requirement(status: Dictionary) -> String:
+	return L10n.format_text("Рекорд мира «%s»: %s / %s м", [
+		_world_name(str(status.get("previous_world", ""))),
+		_number(float(status.get("best_metres", 0.0))),
+		_number(float(status.get("required_metres", 0.0)))])
+
+
+func _menu_world_info(parent: Node, world: Dictionary) -> void:
+	var info := _card(parent, PAPER, 18)
+	info.get_parent().get_parent().name = "MenuWorldInfo"
+	info.add_theme_constant_override("separation", 6)
+	var id := str(world.get("id", "jungle"))
+	info.add_child(_label(_world_xp_text(id), 23, INK, true, HORIZONTAL_ALIGNMENT_CENTER))
+	var capped := bool(Progress.world_xp_status(id).get("capped", false))
+	if capped:
+		info.add_child(_label("Тренировка · XP за забег: 0", 22, GOLD, true, HORIZONTAL_ALIGNMENT_CENTER))
+	var next_world: Dictionary = {}
+	for item: Dictionary in Progress.WORLDS:
+		if not Progress.is_world_unlocked(str(item.get("id", ""))):
+			next_world = item
+			break
+	if not next_world.is_empty():
+		var status: Dictionary = Progress.world_unlock_status(str(next_world["id"]))
+		var goal := L10n.format_text("Далее: «%s» · уровень %d", [_world_name(str(next_world["id"])), int(status["level_required"])])
+		info.add_child(_label(goal + "\n" + _world_record_requirement(status), 21, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER))
+	elif capped:
+		for item: Dictionary in Progress.WORLDS:
+			if not bool(Progress.world_xp_status(str(item["id"])).get("capped", false)):
+				info.add_child(_label(L10n.format_text("Для XP выбери: «%s»", [_world_name(str(item["id"]))]), 21, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER))
+				break
 
 
 func _menu_distance_card(parent: HBoxContainer, card_name: String, metres: float, caption: String, side_length: float) -> void:
@@ -680,8 +740,9 @@ func _show_profile() -> void:
 	_stat(grid, _number(Progress.data.get("runs", 0)), "ЗАБЕГОВ")
 	_stat(grid, _number(Progress.data.get("lifetime_coins", 0)), "МОНЕТ ЗА ВСЁ ВРЕМЯ")
 	_spacer(body, 10)
-	body.add_child(_label("ТВОИ МИРЫ", 30, INK, true))
-	body.add_child(_label("Сейчас: " + str(Progress.current_world().get("name", "Джунгли")), 26, MUTED))
+	body.add_child(_label("СЛОЖНОСТЬ", 30, INK, true))
+	body.add_child(_label("Сейчас: " + str(Progress.current_world().get("name", "Лёгкий")), 26, MUTED))
+	body.add_child(_label("Сложнее забеги — больше XP. Для открытия нужны уровень и рекорд забега в предыдущей сложности.", 23, MUTED))
 	var worlds := GridContainer.new()
 	worlds.columns = 2
 	worlds.add_theme_constant_override("h_separation", 18)
@@ -690,6 +751,7 @@ func _show_profile() -> void:
 	body.add_child(worlds)
 	for item in Progress.WORLDS:
 		_world_button(worlds, item)
+	body.add_child(_label("На указанном уровне забеги становятся тренировочными: без XP. Выбирай следующую сложность для роста.", 23, MUTED))
 	_spacer(body, 10)
 	var unlocked: Array = Progress.data.get("achievements", [])
 	body.add_child(_label("ДОСТИЖЕНИЯ   %d / %d" % [unlocked.size(), Progress.ACHIEVEMENTS.size()], 30, INK, true))
@@ -718,31 +780,45 @@ func _stat(parent: Node, value: String, caption: String) -> void:
 
 func _world_button(parent: Node, item: Dictionary) -> void:
 	var id := str(item.get("id", "jungle"))
-	var unlocked := Progress.is_world_unlocked(id)
+	var status: Dictionary = Progress.world_unlock_status(id)
+	var unlocked := bool(status.get("unlocked", false))
 	var selected := str(Progress.data.get("selected_world", "jungle")) == id
-	var button := _button("", "world", id, 172, selected, 28)
-	button.disabled = not unlocked
-	button.tooltip_text = L10n.text(str(item.get("name", "")))
-	parent.add_child(button)
-	var margins := MarginContainer.new()
-	button.add_child(margins)
-	margins.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for edge in ["left", "right", "top", "bottom"]:
-		margins.add_theme_constant_override("margin_" + edge, 23)
-	margins.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var row := _row(margins, 15)
+	# Let containers determine card height from wrapped text in either language.
+	# Anchored labels inside fixed-height buttons could overlap the next row.
+	var card := _card(parent, Color("eaf0d4") if selected else PAPER, 20)
+	card.get_parent().get_parent().name = "World_" + id
+	card.add_theme_constant_override("separation", 10)
+	var row := _row(card, 12)
 	var icon := WorldArt.new()
 	icon.world_id = id
-	icon.custom_minimum_size = Vector2(68, 80)
+	icon.custom_minimum_size = Vector2(54, 66)
 	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.modulate.a = 1.0 if unlocked else 0.5
 	row.add_child(icon)
-	var info := _vbox(row, 7)
+	var info := _vbox(row, 3)
 	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	info.add_child(_label(str(item.get("name", "")), 27, INK if unlocked else MUTED, true))
-	var caption := "ВЫБРАН" if selected else ("ВЫБРАТЬ" if unlocked else "УРОВЕНЬ %d" % int(item.get("unlock", 1)))
-	info.add_child(_label(caption, 20, Color("5e7c45") if unlocked else Color("8b9d81"), true))
+	info.add_child(_label(str(item.get("theme_name", "")), 20, MUTED))
+	card.add_child(_label(_world_xp_text(id), 22, INK, true))
+	if bool(Progress.world_xp_status(id).get("capped", false)):
+		card.add_child(_label("Тренировка · XP за забег: 0", 21, GOLD, true))
+	var profile := RushTuning.profile_for(id)
+	card.add_child(_label(L10n.format_text("Темп: %s → %s м/с", [
+		_decimal(float(profile["start_speed"]) / RushTuning.PIXELS_PER_METRE, 1),
+		_decimal(float(profile["max_speed"]) / RushTuning.PIXELS_PER_METRE, 1)]), 21, MUTED))
+	card.add_child(_label(L10n.format_text("Максимальный темп: с %s м", [_number(profile["cap_metres"])]), 21, MUTED))
+	if not unlocked:
+		card.add_child(_label(L10n.format_text("Нужен уровень %d · сейчас %d", [int(status["level_required"]), Progress.get_level()]), 22, MUTED, true))
+		if not str(status.get("previous_world", "")).is_empty():
+			card.add_child(_label(_world_record_requirement(status), 21, MUTED))
+			card.add_child(_progress(float(status["best_metres"]), float(status["required_metres"]), LIME, 10))
+	_spacer(card, 0, true)
+	var caption := "ВЫБРАН" if selected else ("ВЫБРАТЬ" if unlocked else "ЗАКРЫТО")
+	var button := _button(caption, "world", id, 64, selected, 22)
+	button.name = "Select_" + id
+	button.disabled = not unlocked
+	card.add_child(button)
 
 
 func _show_daily() -> void:

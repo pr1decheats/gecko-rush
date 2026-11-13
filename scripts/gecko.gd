@@ -59,7 +59,7 @@ func _process(delta: float) -> void:
 	_visual_speed_factor = lerpf(_visual_speed_factor, clampf(run_speed_factor, 0.5, 3.0), 1.0 - exp(-delta * 3.5))
 	var running: bool = mode == "run" or (mode in ["wake_climb", "climb_launch"] and launch_progress >= 0.58)
 	var stride_hz := clampf(1.45 + (_visual_speed_factor - 1.0) * 0.26, 1.25, 1.97) if running else 0.22
-	var tail_hz := clampf(0.38 + (_visual_speed_factor - 1.0) * 0.075, 0.34, 0.53) if running else 0.20
+	var tail_hz := clampf(0.38 + (_visual_speed_factor - 1.0) * 0.075, 0.34, 0.53) if running else (0.055 if mode == "sleep" else 0.20)
 	_stride_phase = fposmod(_stride_phase + delta * TAU * stride_hz, TAU)
 	_tail_phase = fposmod(_tail_phase + delta * TAU * tail_hz, TAU)
 	_landing = move_toward(_landing, 0.0, delta * 7.0)
@@ -262,13 +262,13 @@ func _segment(a: Vector2, b: Vector2, width_a: float, width_b: float, color: Col
 	]), color)
 
 func _profile_pose() -> Dictionary:
-	return {"hip": Vector2(34, 72), "chest": Vector2(32, 35), "control": Vector2(36, 53),
+	return {"hip": Vector2(34, 72), "chest": Vector2(32, 35), "control": Vector2(36, 53), "control2": Vector2(36, 53),
 		"head": Vector2(32, 26), "head_angle": 0.0, "curl": 0.0, "unfold": 1.0,
 		"rise": 1.0, "crawl": 1.0, "alert": 0.0, "eyes": 1.0}
 
 func _mix_pose(a: Dictionary, b: Dictionary, amount: float) -> Dictionary:
 	var pose: Dictionary = {}
-	for key: String in ["hip", "chest", "control", "head"]:
+	for key: String in ["hip", "chest", "control", "control2", "head"]:
 		var point: Vector2 = a[key]
 		pose[key] = point.lerp(b[key], amount)
 	for key: String in ["head_angle", "curl", "unfold", "rise", "crawl", "alert", "eyes"]:
@@ -276,23 +276,28 @@ func _mix_pose(a: Dictionary, b: Dictionary, amount: float) -> Dictionary:
 	return pose
 
 func _sleep_pose() -> Dictionary:
-	var breath := sin(_clock * 1.6) * 0.42
-	return {"hip": Vector2(42, 91), "chest": Vector2(28, 84 + breath), "control": Vector2(37, 76 + breath),
-		"head": Vector2(20, 94 + breath * 0.4), "head_angle": -1.9, "curl": 1.0, "unfold": 0.0,
+	# The rib cage bends around the resting head; the broad tail continues that
+	# curve along the belly. A slow breath moves the chest, never the planted feet.
+	var breath := sin(_clock * TAU / 5.4) * 0.34
+	return {"hip": Vector2(49, 93), "chest": Vector2(28, 91 + breath), "control": Vector2(49, 80 + breath), "control2": Vector2(29, 80 + breath),
+		"head": Vector2(22, 95 + breath * 0.25), "head_angle": -1.72, "curl": 1.0, "unfold": 0.0,
 		"rise": 0.0, "crawl": 0.0, "alert": 0.0, "eyes": 0.0}
 
 func _wake_pose() -> Dictionary:
 	var asleep := _sleep_pose()
-	var awake := {"hip": Vector2(42, 91), "chest": Vector2(27, 83), "control": Vector2(37, 76),
-		"head": Vector2(20, 77), "head_angle": -1.1, "curl": 0.95, "unfold": 0.0,
+	var awake := {"hip": Vector2(49, 93), "chest": Vector2(30, 84), "control": Vector2(49, 80), "control2": Vector2(31, 76),
+		"head": Vector2(22, 78), "head_angle": -1.05, "curl": 1.0, "unfold": 0.0,
 		"rise": 0.0, "crawl": 0.0, "alert": 1.0, "eyes": 1.0}
-	var extended := {"hip": Vector2(47, 88), "chest": Vector2(25, 81), "control": Vector2(37, 79),
-		"head": Vector2(14, 76), "head_angle": -1.35, "curl": 0.48, "unfold": 1.0,
-		"rise": 0.0, "crawl": 0.35, "alert": 0.25, "eyes": 1.0}
+	var extended := {"hip": Vector2(47, 88), "chest": Vector2(27, 81), "control": Vector2(44, 76), "control2": Vector2(32, 75),
+		"head": Vector2(15, 77), "head_angle": -1.35, "curl": 0.42, "unfold": 1.0,
+		"rise": 0.0, "crawl": 0.0, "alert": 0.25, "eyes": 1.0}
 	if launch_progress <= 0.20:
 		return asleep
 	if launch_progress < 0.42:
-		return _mix_pose(asleep, awake, smoothstep(0.20, 0.42, launch_progress))
+		var pose := _mix_pose(asleep, awake, smoothstep(0.20, 0.42, launch_progress))
+		# The eye reacts first, then the chin lifts clear of the tucked forefoot.
+		pose["eyes"] = smoothstep(0.205, 0.26, launch_progress)
+		return pose
 	if launch_progress < 0.58:
 		return _mix_pose(awake, extended, smoothstep(0.42, 0.58, launch_progress))
 	return _mix_pose(extended, _profile_pose(), smoothstep(0.58, 0.70, launch_progress))
@@ -301,27 +306,46 @@ func _body_point(pose: Dictionary, u: float) -> Vector2:
 	var hip: Vector2 = pose["hip"]
 	var control: Vector2 = pose["control"]
 	var chest: Vector2 = pose["chest"]
-	return hip.bezier_interpolate(control, control, chest, u)
+	return hip.bezier_interpolate(control, pose["control2"], chest, u)
+
+func _body_normal(pose: Dictionary, u: float) -> Vector2:
+	var tangent := _body_point(pose, minf(1.0, u + 0.02)) - _body_point(pose, maxf(0.0, u - 0.02))
+	return tangent.normalized().orthogonal()
+
+func _body_width(pose: Dictionary, u: float) -> float:
+	return lerpf(4.5 + sin(u * PI) * 7.6, 7.0 + sin(u * PI) * 5.0, float(pose["curl"]))
 
 func _body_ribbon(pose: Dictionary, width_scale: float, offset: Vector2, color: Color) -> void:
 	var left := PackedVector2Array()
 	var right := PackedVector2Array()
-	for i in range(11):
-		var u := float(i) / 10.0
+	for i in range(17):
+		var u := float(i) / 16.0
 		var point := _body_point(pose, u)
-		var tangent := _body_point(pose, minf(1.0, u + 0.02)) - _body_point(pose, maxf(0.0, u - 0.02))
-		var normal := tangent.normalized().orthogonal()
-		var width := (4.5 + sin(u * PI) * 7.6) * width_scale
+		var normal := _body_normal(pose, u)
+		var width := _body_width(pose, u) * width_scale
 		left.append(point - ORIGIN + offset + normal * width)
 		right.append(point - ORIGIN + offset - normal * width)
 	for i in range(right.size() - 1, -1, -1):
 		left.append(right[i])
-	# A curled spine can bend more sharply than its outer radius. Its hull keeps
-	# the sleeping body solid instead of making a self-intersecting ribbon.
+	var curl := float(pose["curl"])
+	if curl > 0.0:
+		var haunch: Vector2 = pose["hip"] + Vector2(-4, 1) * curl
+		for i in range(12):
+			var a := TAU * float(i) / 12.0
+			left.append(haunch - ORIGIN + offset + Vector2(cos(a) * 9.0, sin(a) * 7.0) * curl * width_scale)
+	# The inner edge of a tight curl can fold over itself. Its hull forms one
+	# solid rib cage; markings below follow the spine and stay inside that mass.
 	var outline := Geometry2D.convex_hull(left)
 	if outline.size() > 3:
 		outline.remove_at(outline.size() - 1)
 		draw_colored_polygon(outline, color)
+
+func _neck(pose: Dictionary, width: float, color: Color) -> void:
+	var chest: Vector2 = pose["chest"]
+	var nape := _head_point(pose, Vector2(0, 9))
+	_segment(chest, nape, width, width * 0.88, color)
+	_pixel_ellipse(chest, Vector2.ONE * width * 0.5, color)
+	_pixel_ellipse(nape, Vector2.ONE * width * 0.44, color)
 
 func _rotated_ellipse(at: Vector2, radius: Vector2, angle: float, color: Color) -> void:
 	var polygon := PackedVector2Array()
@@ -334,60 +358,120 @@ func _head_point(pose: Dictionary, offset: Vector2) -> Vector2:
 	var head: Vector2 = pose["head"]
 	return head + offset.rotated(float(pose["head_angle"]))
 
-func _draw_pose_body(pose: Dictionary, tint: Color, blink: int) -> void:
+func _draw_pose_body(pose: Dictionary, tint: Color, blink: int, include_head: bool = true) -> void:
 	var ink := Color("192f32") * tint
 	var deep := Color("315c44") * tint
 	var skin := Color("70ad50") * tint
 	var lit := Color("aad969") * tint
 	var pale := Color("d8e99b") * tint
+	# Neck and hips overlap the same torso silhouette at every wake fraction.
+	# Surface details are inset along the local rib normal, so no belly texture
+	# sticks out when the spine changes from a C shape to a vertical profile.
+	_neck(pose, 15.0, ink)
 	_body_ribbon(pose, 1.0, Vector2.ZERO, ink)
+	_neck(pose, 11.4, deep)
 	_body_ribbon(pose, 0.87, Vector2.ZERO, deep)
-	_body_ribbon(pose, 0.73, Vector2(-1.3, -0.3), skin)
-	var previous := _body_point(pose, 0.12) + Vector2(-5, 0)
-	for i in range(1, 8):
-		var u := 0.12 + float(i) * 0.095
-		var point := _body_point(pose, u) + Vector2(-5, 0)
-		_segment(previous, point, 4.4, 4.4, pale)
+	_neck(pose, 9.6, skin)
+	_body_ribbon(pose, 0.73, Vector2(-0.7, -0.3), skin)
+	var previous := Vector2.ZERO
+	for i in range(11):
+		var u := 0.20 + float(i) * 0.058
+		var point := _body_point(pose, u) + _body_normal(pose, u) * _body_width(pose, u) * 0.35
+		if i > 0:
+			_segment(previous, point, 3.5, 3.5, pale)
+		_pixel_ellipse(point, Vector2(1.75, 1.75), pale)
 		previous = point
 	for i in range(5):
-		var point := _body_point(pose, 0.22 + float(i) * 0.13)
-		_pixel_ellipse(point + Vector2(4.5, 0), Vector2(2.3, 1.6), deep)
-		_pixel_ellipse(point + Vector2(0, -1.3), Vector2(1.6, 0.65), lit)
+		var u := 0.23 + float(i) * 0.13
+		var point := _body_point(pose, u)
+		var normal := _body_normal(pose, u)
+		_pixel_ellipse(point - normal * _body_width(pose, u) * 0.43, Vector2(2.0, 1.5), deep)
+		_pixel_ellipse(point, Vector2(1.5, 0.65), lit)
+	if include_head:
+		_draw_pose_head(pose, tint, blink)
+
+func _draw_pose_head(pose: Dictionary, tint: Color, blink: int) -> void:
+	var ink := Color("192f32") * tint
+	var deep := Color("315c44") * tint
+	var skin := Color("70ad50") * tint
+	var lit := Color("aad969") * tint
+	var pale := Color("d8e99b") * tint
 	var head: Vector2 = pose["head"]
 	var angle := float(pose["head_angle"])
-	_rotated_ellipse(head + Vector2(0, 1).rotated(angle), Vector2(13, 16), angle, ink)
-	_rotated_ellipse(head, Vector2(11, 14), angle, skin)
-	_rotated_ellipse(_head_point(pose, Vector2(-6, -8)), Vector2(5.5, 7.8), angle, lit)
-	_rotated_ellipse(_head_point(pose, Vector2(-8, 0)), Vector2(3.8, 7.0), angle, pale)
+	# One closed contour includes the muzzle. All cheek/eyelid details fit
+	# inside it, so a turned head cannot expose floating highlight pieces.
+	var contour := PackedVector2Array([Vector2(-4, -17), Vector2(-8, -16), Vector2(-11, -13),
+		Vector2(-13, -9), Vector2(-14, -4), Vector2(-13, 2), Vector2(-10, 8), Vector2(-5, 13),
+		Vector2(0, 15), Vector2(5, 14), Vector2(10, 10), Vector2(12, 5), Vector2(13, 0),
+		Vector2(11, -7), Vector2(7, -13), Vector2(2, -16)])
+	for layer in range(2):
+		var polygon := PackedVector2Array()
+		for point in contour:
+			polygon.append(head - ORIGIN + (point * (1.0 if layer == 0 else 0.86)).rotated(angle))
+		draw_colored_polygon(polygon, ink if layer == 0 else skin)
+	_rotated_ellipse(_head_point(pose, Vector2(-7, -8)), Vector2(4.4, 5.8), angle, lit)
+	_rotated_ellipse(_head_point(pose, Vector2(-8, 0)), Vector2(3.1, 6.0), angle, pale)
 	_segment(_head_point(pose, Vector2(-6, 6)), _head_point(pose, Vector2(0, 9)), 1.5, 1.2, deep)
 	_pixel_ellipse(_head_point(pose, Vector2(-8, -7)), Vector2(1.0, 1.0), deep)
 	var eye := _head_point(pose, Vector2(3, -3))
-	_rotated_ellipse(eye, Vector2(6, 7), angle, ink)
-	if blink == 1 or float(pose["eyes"]) < 0.35:
-		_rotated_ellipse(eye, Vector2(5.3, 6.0), angle, skin)
-		_segment(_head_point(pose, Vector2(-1, -2)), _head_point(pose, Vector2(7, -2)), 1.8, 1.8, deep)
-		_segment(_head_point(pose, Vector2(-1, -3.4)), _head_point(pose, Vector2(7, -3.4)), 1.0, 1.0, lit)
+	var openness := float(pose["eyes"])
+	if blink == 1 or openness < 0.08:
+		# A relaxed eyelid belongs to the cheek, rather than a black empty socket.
+		_rotated_ellipse(eye, Vector2(5.5, 5.0), angle, skin)
+		var lid_angle := angle + float(pose["curl"]) * PI * 0.5
+		_segment(eye + Vector2(-4, 0).rotated(lid_angle), eye + Vector2(0, 1).rotated(lid_angle), 1.5, 1.5, deep)
+		_segment(eye + Vector2(0, 1).rotated(lid_angle), eye + Vector2(4, 0).rotated(lid_angle), 1.5, 1.0, deep)
+		_segment(eye + Vector2(-3.5, -1.5).rotated(lid_angle), eye + Vector2(3.5, -1.5).rotated(lid_angle), 1.0, 1.0, lit)
 	else:
 		var surprise := float(pose["alert"])
-		_rotated_ellipse(eye + Vector2(0, -0.6).rotated(angle), Vector2(4.2 + surprise * 0.7, 5.2 + surprise * 0.6), angle, Color("f7f5d7") * tint)
-		_rotated_ellipse(_head_point(pose, Vector2(2, -4)), Vector2(1.6, 4.0), angle, ink)
-		_pixel_ellipse(_head_point(pose, Vector2(1.5, -6)), Vector2(1.1, 1.1), Color.WHITE * tint)
+		_rotated_ellipse(eye, Vector2(6, 7 * openness), angle, ink)
+		_rotated_ellipse(eye + Vector2(0, -0.6).rotated(angle), Vector2(4.2 + surprise * 0.7, (5.2 + surprise * 0.6) * openness), angle, Color("f7f5d7") * tint)
+		_rotated_ellipse(_head_point(pose, Vector2(2, -3 - openness)), Vector2(1.6, 4.0 * openness), angle, ink)
+		_pixel_ellipse(_head_point(pose, Vector2(1.5, -3 - 3.0 * openness)), Vector2(1.1, 1.1), Color.WHITE * tint)
+
+func _tail_point(pose: Dictionary, u: float) -> Vector2:
+	var curl := float(pose["curl"])
+	var root: Vector2 = pose["hip"]
+	root += Vector2(1, -1)
+	var straight := Vector2(sin(u * PI * 1.6 + _tail_phase) * u * 10.0, u * 42.0)
+	# Two joined curves bring the tail along the outside of the haunch, then
+	# around the resting jaw. The tip stays relaxed beside the head.
+	var coiled: Vector2
+	if u < 0.5:
+		coiled = Vector2.ZERO.bezier_interpolate(Vector2(21, 8), Vector2(13, 20), Vector2(-10, 13), u * 2.0)
+	else:
+		coiled = Vector2(-10, 13).bezier_interpolate(Vector2(-37, 16), Vector2(-45, -2), Vector2(-29, -5), (u - 0.5) * 2.0)
+	# Sleep has an almost still tail; the running wave enters only as it uncoils.
+	coiled.y += sin(_clock * TAU / 7.5 + u * 2.0) * u * 0.14
+	return root + straight.lerp(coiled, curl)
 
 func _draw_pose_tail(pose: Dictionary, tint: Color) -> void:
 	var curl := float(pose["curl"])
-	var root: Vector2 = pose["hip"]
-	root += Vector2(1, -1).lerp(Vector2(2, 2), curl)
-	var previous := root
-	for k in range(1, 25):
-		var u := float(k) / 24.0
-		var straight := Vector2(sin(u * PI * 1.6 + _tail_phase) * u * 10.0, u * 42.0)
-		var coiled := Vector2.ZERO.bezier_interpolate(Vector2(38, 26), Vector2(29, -43), Vector2(-7, -19), u)
-		coiled.y += sin(_tail_phase + u * 3.0) * u * 0.6
-		var point := root + straight.lerp(coiled, curl)
-		var thickness := maxf(0.8, (1.0 - u) * 9.0)
-		_segment(previous, point, thickness + 1.5, thickness + 1.0, Color("192f32") * tint)
-		_segment(previous + Vector2(0, -0.5), point + Vector2(0, -0.5), thickness, maxf(0.7, thickness - 0.8), Color("70ad50" if k % 6 < 4 else "315c44") * tint)
-		previous = point
+	var ink := Color("192f32") * tint
+	var skin := Color("70ad50") * tint
+	var deep := Color("315c44") * tint
+	# Outline and skin each form a continuous strip. Drawing the complete ink
+	# pass first avoids the dark cross seams of individually outlined segments.
+	for layer in range(2):
+		var previous := _tail_point(pose, 0.0)
+		var border := 2.0 if layer == 0 else 0.0
+		var color := ink if layer == 0 else skin
+		_pixel_ellipse(previous, Vector2.ONE * (lerpf(9.0, 14.0, curl) + border) * 0.5, color)
+		for k in range(1, 25):
+			var u := float(k) / 24.0
+			var previous_u := float(k - 1) / 24.0
+			var point := _tail_point(pose, u)
+			var width := maxf(0.8, (1.0 - u) * lerpf(9.0, 14.0, curl))
+			var previous_width := maxf(0.8, (1.0 - previous_u) * lerpf(9.0, 14.0, curl))
+			_segment(previous, point, previous_width + border, width + border, color)
+			_pixel_ellipse(point, Vector2.ONE * (width + border) * 0.5, color)
+			previous = point
+	for band in range(5):
+		var u := 0.12 + float(band) * 0.16
+		var point := _tail_point(pose, u)
+		var tangent := (_tail_point(pose, minf(1.0, u + 0.015)) - _tail_point(pose, maxf(0.0, u - 0.015))).normalized()
+		var half_width := maxf(0.6, (1.0 - u) * lerpf(9.0, 14.0, curl) * 0.42)
+		_segment(point - tangent.orthogonal() * half_width, point + tangent.orthogonal() * half_width, 1.7, 1.7, deep)
 
 func _draw_tail(tint: Color, ground: bool = false) -> void:
 	var ink := Color("192f32") * tint
@@ -413,11 +497,11 @@ func _draw_hand(foot: Vector2, back: bool, tint: Color, direction: Vector2 = Vec
 	var pale := Color("70ad50" if back else "d8e99b") * tint
 	_pixel_ellipse(foot, Vector2(3.7, 4.5), ink)
 	_pixel_ellipse(foot - direction * 0.2, Vector2(2.7, 3.2), skin)
-	# Four splayed, jointed digits end in the broad adhesive pads of a gecko.
-	for toe in range(4):
-		var spread := (float(toe) - 1.5) * 0.42
+	# Five jointed digits: the short outer toes cup the surface beside the pads.
+	for toe in range(5):
+		var spread := (float(toe) - 2.0) * 0.34
 		var reach := direction.rotated(spread)
-		var length := 6.0 + (1.0 if toe in [1, 2] else 0.0)
+		var length := 7.0 - absf(float(toe) - 2.0) * 1.2
 		var joint := foot + reach * length * 0.55 + direction.orthogonal() * sin(spread) * 0.7
 		var pad := joint + reach.rotated(spread * 0.22) * length * 0.45
 		draw_line(foot - ORIGIN, joint - ORIGIN, ink, 2.5, false)
@@ -454,53 +538,77 @@ func _profile_limb_points(front: bool, back: bool, kind: String, amount: float =
 		foot = elbow + Vector2(-8.0, -7.0 if front else 6.0)
 	return PackedVector2Array([shoulder, elbow, foot])
 
-func _draw_limb_chain(points: PackedVector2Array, front: bool, back: bool, tint: Color, hand_direction: Vector2 = Vector2.LEFT) -> void:
+func _draw_limb_chain(points: PackedVector2Array, front: bool, back: bool, tint: Color, hand_direction: Vector2 = Vector2.LEFT, fold: float = 0.0, hand_openness: float = 1.0) -> void:
 	var ink := Color("192f32") * tint
 	var skin := Color("315c44" if back else "70ad50") * tint
 	var lit := Color("70ad50" if back else "aad969") * tint
 	var shoulder := points[0]
 	var elbow := points[1]
 	var foot := points[2]
-	var thigh_width := 6.0 if front else 8.0
-	_segment(shoulder, elbow, thigh_width + 1.6, 5.2, ink)
-	_pixel_ellipse(elbow, Vector2(3.2, 3.2), ink)
-	_segment(elbow, foot, 5.2, 3.4, ink)
-	_segment(shoulder, elbow, thigh_width, 3.5, skin)
-	_pixel_ellipse(elbow, Vector2(2.2, 2.2), skin)
-	_segment(elbow, foot, 3.4, 2.0, skin)
+	var thigh_width := lerpf(6.0 if front else 8.0, 5.0 if front else 7.5, fold)
+	var elbow_width := lerpf(5.2, 6.0, fold)
+	_segment(shoulder, elbow, thigh_width + 1.6, elbow_width, ink)
+	_pixel_ellipse(elbow, Vector2.ONE * lerpf(3.2, 3.0, fold), ink)
+	_segment(elbow, foot, elbow_width, lerpf(3.4, 4.8, fold), ink)
+	_segment(shoulder, elbow, thigh_width, lerpf(3.5, 4.0, fold), skin)
+	_pixel_ellipse(elbow, Vector2.ONE * lerpf(2.2, 2.0, fold), skin)
+	_segment(elbow, foot, lerpf(3.4, 4.0, fold), lerpf(2.0, 2.8, fold), skin)
 	_segment(shoulder + Vector2(0, -0.9), elbow + Vector2(0, -0.6), 1.5, 1.0, lit)
-	_draw_hand(foot, back, tint, hand_direction)
+	_draw_tucked_hand(foot, back, tint, hand_openness, hand_direction)
 
 func _draw_limbs(back: bool, kind: String, tint: Color) -> void:
 	for front: bool in [true, false]:
 		_draw_limb_chain(_profile_limb_points(front, back, kind), front, back, tint)
 
+func _draw_tucked_hand(foot: Vector2, back: bool, tint: Color, openness: float, direction: Vector2) -> void:
+	# At rest only three folded digits are visible; the other two tuck beneath
+	# the palm. They open into the same five-pad hand as the leg takes weight.
+	if openness >= 0.99:
+		_draw_hand(foot, back, tint, direction)
+		return
+	var ink := Color("192f32") * tint
+	var skin := Color("315c44" if back else "70ad50") * tint
+	var lit := Color("70ad50" if back else "aad969") * tint
+	_pixel_ellipse(foot, Vector2(3.0, 2.5), ink)
+	_pixel_ellipse(foot, Vector2(2.1, 1.6), skin)
+	for toe in range(3):
+		var spread := (float(toe) - 1.0) * lerpf(0.35, 0.6, openness)
+		var reach := direction.rotated(spread)
+		var middle := foot + reach * lerpf(2.0, 3.8, openness)
+		var tip := middle + reach.rotated(0.4 * (1.0 - openness)) * lerpf(1.3, 2.7, openness)
+		_segment(foot, middle, 2.0, 1.7, ink)
+		_segment(middle, tip, 1.7, 1.5, ink)
+		_segment(foot, middle, 1.0, 0.9, lit)
+		_pixel_ellipse(tip, Vector2(1.0, 0.9), lit)
+
 func _draw_wake_limbs(pose: Dictionary, back: bool, tint: Color) -> void:
 	for front: bool in [true, false]:
-		var sleep_points := PackedVector2Array([
-			Vector2(27, 86) if front else Vector2(43, 91),
-			Vector2(31, 99) if front else Vector2(48, 99),
-			Vector2(25, 104) if front else Vector2(43, 104)])
-		var ground_points := PackedVector2Array([
-			Vector2(25, 81) if front else Vector2(45, 87),
-			Vector2(13, 91) if front else Vector2(54, 95),
-			Vector2(18, 104) if front else Vector2(48, 104)])
+		var body_u := 0.86 if front else 0.10
+		var shoulder := _body_point(pose, body_u)
+		shoulder += _body_normal(pose, body_u) * _body_width(pose, body_u) * 0.3 * float(pose["curl"])
+		var sleep_elbow := Vector2(35, 99) if front else Vector2(51, 99)
+		var sleep_foot := Vector2(29, 98) if front else Vector2(43, 99)
+		var ground_elbow := Vector2(18, 91) if front else Vector2(54, 96)
+		var ground_foot := Vector2(20, 104) if front else Vector2(48, 104)
 		var profile_points := _profile_limb_points(front, back, "run", float(pose["crawl"]))
-		var points := PackedVector2Array()
+		var unfold := float(pose["unfold"])
+		var rise := float(pose["rise"])
+		var points := PackedVector2Array([shoulder,
+			sleep_elbow.lerp(ground_elbow, unfold), sleep_foot.lerp(ground_foot, unfold)])
 		for i in range(3):
-			var point := sleep_points[i].lerp(ground_points[i], float(pose["unfold"]))
 			if back:
-				point += Vector2(-2, -4)
-			points.append(point.lerp(profile_points[i], float(pose["rise"])))
-		var hand_direction := Vector2.DOWN.lerp(Vector2.LEFT, float(pose["rise"])).normalized()
-		_draw_limb_chain(points, front, back, tint, hand_direction)
+				points[i] += Vector2(-2, -3)
+			points[i] = points[i].lerp(profile_points[i], rise)
+		var hand_direction := Vector2(-0.9, 0.45).normalized().lerp(Vector2.DOWN, unfold).lerp(Vector2.LEFT, rise).normalized()
+		_draw_limb_chain(points, front, back, tint, hand_direction, 1.0 - rise, maxf(unfold, rise))
 
 func _draw_wake(pose: Dictionary, blink: int, direction: float, tint: Color) -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(direction, 1.0) * PIXEL_SCALE)
 	_draw_pose_tail(pose, tint)
 	_draw_wake_limbs(pose, true, tint)
-	_draw_pose_body(pose, tint, blink)
+	_draw_pose_body(pose, tint, blink, false)
 	_draw_wake_limbs(pose, false, tint)
+	_draw_pose_head(pose, tint, blink)
 	draw_set_transform(Vector2.ZERO)
 
 func _draw_ground(tint: Color, blink: int, lean: float = 0.0, narrowing: float = 1.0) -> void:

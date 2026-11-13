@@ -76,9 +76,9 @@ func _run() -> void:
 	check(game.ui.INK.get_luminance() < 0.3, "light theme has dark readable text")
 	game._on_action("setting", {"key": "theme", "value": "dark"})
 	check(game.ui.INK.get_luminance() > 0.7 and game.environment.theme == "dark", "dark theme applies to UI and environment")
-	check(is_equal_approx(RushTuning.speed_at(0), 820), "start speed has a moderate faster baseline")
-	check(is_equal_approx(RushTuning.speed_at(1000 * RushTuning.PIXELS_PER_METRE), 2200), "1000 metres has fast reaction speed")
-	check(RushTuning.speed_at(300000) == 2700, "top speed remains capped")
+	check(is_equal_approx(RushTuning.speed_at(0), 720), "Easy starts at its selected difficulty baseline")
+	check(is_equal_approx(RushTuning.speed_at(500 * RushTuning.PIXELS_PER_METRE), 1063), "Easy reaches its gentle first acceleration target at 500 metres")
+	check(RushTuning.speed_at(300000) == 1700, "Easy top speed remains capped below the absolute certification ceiling")
 	check(RushTuning.PLAYER_RIGHT - RushTuning.PLAYER_LEFT < 500, "corridor is narrower")
 	for pair in [[0, 0], [35, 0], [40, 1], [59, 1], [60, 1], [64, 0], [80, 0], [100, 1], [120, 1], [124, 0]]:
 		check(is_equal_approx(RushTuning.night_amount(pair[0]), pair[1]), "40-second day / 20-second night phase at %d" % pair[0])

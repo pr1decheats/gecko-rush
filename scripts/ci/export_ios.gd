@@ -47,8 +47,8 @@ func _initialize() -> void:
 	presets.set_value(options, "application/bundle_identifier", "org.geckorush.game")
 	# Keep native metadata aligned with the gameplay release, independently of
 	# stale platform presets from earlier Android-only iterations.
-	presets.set_value(options, "application/short_version", str(ProjectSettings.get_setting("application/config/version", "2.2.0")))
-	presets.set_value(options, "application/version", "4")
+	presets.set_value(options, "application/short_version", str(ProjectSettings.get_setting("application/config/version", "2.3.0")))
+	presets.set_value(options, "application/version", str(presets.get_value(options, "application/version", "5")))
 	presets.set_value(options, "application/min_ios_version", "14.0")
 	for key: String in [
 		"application/code_sign_identity_debug", "application/code_sign_identity_release",

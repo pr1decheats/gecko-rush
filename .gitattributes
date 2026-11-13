@@ -1,0 +1,2 @@
+# Keep frozen release binaries out of Godot staging and source archives.
+.github/release-assets/** export-ignore

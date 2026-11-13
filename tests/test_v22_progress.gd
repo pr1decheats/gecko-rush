@@ -15,6 +15,16 @@ func threshold(level: int) -> int:
 func fresh() -> void:
 	p.data = p._defaults()
 	p.data["settings"]["music"] = false
+func satisfy_previous_world_records(through_id: String) -> void:
+	for world: Dictionary in p.WORLDS:
+		var previous: String = world["previous_world"]
+		if not previous.is_empty():
+			var stats: Dictionary = p.data["world_stats"].get(previous, p._empty_world_stats())
+			stats["best_height"] = maxf(float(stats["best_height"]), float(world["required_metres"]))
+			p.data["world_stats"][previous] = stats
+		if world["id"] == through_id:
+			break
+	p._refresh_world_unlocks()
 func _initialize() -> void:
 	call_deferred("_run")
 func _run() -> void:
@@ -38,10 +48,10 @@ func _run() -> void:
 	check(p.data["achievements"] == ["first_jump", "height_1000", "jumps_100", "level_10"], "Existing achievements survive reload")
 	fresh()
 	var first: Dictionary = p.finish_run({"height": 100.0, "passed": 4, "jumps": 1, "coins": 2, "run_id": "first"})
-	check(first["xp"] == 35 and p.get_level() == 1, "First 100m: 10 height + 2 passed + 8 record + 15 first jump")
+	check(first["xp"] == 26 and p.get_level() == 1, "Easy first 100m: floor((10 height + 2 passed + 8 record) × 0.55) + 15 first jump")
 	check(first["new_achievements"] == ["first_jump"], "Only first jump unlocks at 100m")
 	var second: Dictionary = p.finish_run({"height": 100.0, "passed": 5, "jumps": 1, "coins": 2, "run_id": "second"})
-	check(second["xp"] == 12, "Repeat XP rounds 5 obstacles down to 2")
+	check(second["xp"] == 6, "Easy repeat XP floors 5 obstacles to 2, then floors 12 base XP × 0.55")
 	var before_duplicate: Dictionary = p.data.duplicate(true)
 	p.finish_run({"height": 5000, "passed": 500, "jumps": 1000, "coins": 1000, "run_id": "second"})
 	check(p.data == before_duplicate, "Duplicate run ID cannot change any counters")
@@ -61,6 +71,8 @@ func _run() -> void:
 	p.data["best_height"] = 1000.0
 	p.data["xp"] = threshold(25) - 50
 	p.data["achievements"] = ["level_10"]
+	satisfy_previous_world_records("crystal")
+	check(p.select_world("crystal"), "Level25 chain runs on earned Expert difficulty below its level30 XP ceiling")
 	var chained25: Dictionary = p.finish_run({"height": 0, "run_id": "chain25"})
 	check("height_1000" in chained25["new_achievements"] and "level_25" in chained25["new_achievements"], "Height achievement can cross level25 and award its milestone")
 	check(chained25["xp"] == 200, "Level25 chain pays height + milestone once")
@@ -71,9 +83,11 @@ func _run() -> void:
 	p.data["xp"] = threshold(50) - 100
 	p.data["lifetime_coins"] = 999
 	p.data["achievements"] = ["height_1000", "level_10", "level_25", "height_2000"]
+	satisfy_previous_world_records("volcano")
+	check(p.select_world("volcano"), "Level50 chain runs on earned Nightmare difficulty")
 	var chained50: Dictionary = p.finish_run({"height": 0, "run_id": "chain50"})
 	check("height_5000" in chained50["new_achievements"] and "level_50" in chained50["new_achievements"] and "coins_1000" in chained50["new_achievements"], "Height XP, level50 and level coin rewards resolve every goal")
-	check(chained50["xp"] == 380 and chained50["level_bonus"] == 1, "Level50 chain has exact one-time XP and one level coin")
+	check(chained50["xp"] == 100 and chained50["level_bonus"] == 1 and p.data["xp"] == threshold(50), "Nightmare clips all chained achievement XP to its level50 ceiling and pays one level coin")
 	check(p.data["coins"] == 1 and p.data["lifetime_coins"] == 1000, "Level reward counts as earned currency")
 	p.save_game()
 	p.load_game()

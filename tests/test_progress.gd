@@ -14,6 +14,19 @@ func check(condition: bool, message: String) -> void:
 		failures.append(message)
 		printerr("FAIL: ", message)
 
+func satisfy_previous_world_records(through_id: String) -> void:
+	# Fixture records meet the same skill gates as completed runs. XP remains
+	# separate so the test can independently verify both kinds of requirement.
+	for world: Dictionary in progress.WORLDS:
+		var previous: String = world["previous_world"]
+		if not previous.is_empty():
+			var stats: Dictionary = progress.data["world_stats"].get(previous, progress._empty_world_stats())
+			stats["best_height"] = maxf(float(stats["best_height"]), float(world["required_metres"]))
+			progress.data["world_stats"][previous] = stats
+		if world["id"] == through_id:
+			break
+	progress._refresh_world_unlocks()
+
 func _run() -> void:
 	var script: Script = load("res://scripts/progress.gd")
 	progress = script.new()
@@ -29,13 +42,14 @@ func _run() -> void:
 	check(instant["reward_coins"] == 0 and instant["xp"] == 0, "Instant death cannot farm rewards")
 	var first: Dictionary = progress.finish_run({"height": 100, "coins": 2, "jumps": 1, "passed": 4, "run_id": "first"})
 	check(first["reward_coins"] - first["level_bonus"] == 4, "100m payout: 2 pickups + 0 height + 2 record")
-	check(first["new_achievements"] == ["first_jump"] and first["xp"] == 35, "First 100m pays the jump goal and restrained XP")
+	check(first["new_achievements"] == ["first_jump"] and first["xp"] == 26, "Easy first 100m pays floor(20 base XP × 0.55) + 15 first-jump XP")
 	check(progress.get_level() == 1, "A short first run does not immediately farm a level")
 	var good: Dictionary = progress.finish_run({"height": 400, "coins": 8, "jumps": 35, "passed": 12, "run_id": "good"})
-	check(progress.get_level() > 1, "Several meaningful runs still raise the permanent level")
+	check(progress.get_level() == 1 and good["xp"] == 29, "Easy acceleration of XP is restrained: the next record adds floor(54 × 0.55)")
 	check(good["reward_coins"] - good["level_bonus"] == 12, "Good record run pays 12 before level bonus")
 	var repeat_good: Dictionary = progress.finish_run({"height": 400, "coins": 8, "jumps": 35, "passed": 12, "run_id": "repeat_good"})
 	check(repeat_good["reward_coins"] - repeat_good["level_bonus"] == 10, "Ordinary good run pays 10 before level bonus")
+	check(progress.get_level() == 2 and repeat_good["xp"] == 25, "Several meaningful Easy runs still reach the next permanent level")
 	check(not "first_jump" in repeat_good["new_achievements"], "An achievement pays XP only once")
 	progress.finish_run({"height": 300, "coins": 2, "jumps": 1, "passed": 0, "run_id": "daily_finish"})
 	var tasks: Array = progress.daily_tasks()
@@ -85,6 +99,8 @@ func _run() -> void:
 	for level: int in range(1, 25):
 		level_25_xp += progress.xp_required(level)
 	progress.data["xp"] = level_25_xp
+	satisfy_previous_world_records("crystal")
+	check(progress.select_world("crystal"), "Level25 achievement fixture enters an earned Expert world with XP room")
 	var unlocked_goals: Dictionary = progress.finish_run({"height": 0, "coins": 0, "jumps": 0, "passed": 0, "run_id": "unlocked_goals_25"})
 	check("height_2000" in unlocked_goals["new_achievements"] and "jumps_1000" in unlocked_goals["new_achievements"], "Both additional achievements unlock at level 25")
 	check(unlocked_goals["xp"] == 370 and "level_25" in unlocked_goals["new_achievements"], "Height/jump goals and level25 award 370 XP once")
@@ -99,7 +115,9 @@ func _run() -> void:
 	check(progress.get_level() == 101, "Level progression continues above 100")
 	check(progress.level_title() == "Бессмертный геккон", "Level 100 title remains beyond 100")
 	check(progress.xp_required(101) > progress.xp_required(100), "Later levels cost more XP")
-	check(progress.is_world_unlocked("sky") and progress.select_world("sky"), "All six worlds can unlock and selection persists")
+	check(not progress.is_world_unlocked("sky"), "High XP alone cannot replace the previous-world skill records")
+	satisfy_previous_world_records("sky")
+	check(progress.is_world_unlocked("sky") and progress.select_world("sky"), "All six worlds unlock with the required level and skill records")
 	progress.load_game()
 	check(progress.current_world()["id"] == "sky", "World selection survives reload")
 	progress.clear_resume()

@@ -28,10 +28,10 @@ func _run() -> void:
 	game.set_physics_process(false)
 	check(game.gecko.mode == "sleep", "menu starts with a curled sleeping gecko")
 	check(RushTuning.speed_at(0) > 700 and RushTuning.speed_at(0) < 1000, "initial tempo is a moderate increase")
-	check(RushTuning.speed_at(250 * 64) == 1320 and RushTuning.speed_at(1000 * 64) == 2200, "early acceleration improves without changing the 1000m target")
-	check(RushTuning.NIGHT_SPEED == 560.0 * 1.5, "night speed increases exactly one and a half times")
+	check(RushTuning.speed_at(250 * 64) == 891.5 and RushTuning.speed_at(500 * 64) == 1063.0, "Easy smoothly gains the first 35 percent of its speed range over 500m")
+	check(RushTuning.NIGHT_SPEED == 560.0 * 1.5, "legacy nominal night constant remains available")
 	for second: float in [40.0, 45.0, 59.99, 100.0, 119.99]:
-		check(RushTuning.run_speed_at(100000.0, second) == 840.0, "night retains its fixed speed")
+		check(RushTuning.run_speed_at(100000.0, second) == 680.0, "Easy night retains its fixed difficulty speed")
 	check(RushCenterWall.WALL_WIDTH == 56 and game.CENTER_WALL_RIGHT - game.CENTER_WALL_LEFT == 56, "render and physical centre wall use the same thinner width")
 	game._start_run(false)
 	game._process(game.transition_duration * 0.1)
@@ -52,7 +52,7 @@ func _run() -> void:
 	check(panel.corner_radius_top_left == 14 and panel.corner_radius_bottom_right == 14, "height HUD has gently rounded corners")
 	check(game.course.FIRST_CELL == 1050, "first hazards start sooner")
 	var first: Dictionary = game.course.get_witness()[0]
-	check(float(first.cell_end) - float(first.cell_start) < 1120.0, "opening cells are moderately denser")
+	check(is_equal_approx(float(first.cell_end) - float(first.cell_start), 1060.0 * 1.22), "opening cell applies Easy spacing to the short introductory layout")
 	var electrode: Dictionary = game.course._central_hazard("electric", 0.0)
 	electrode.x = game.LEFT_X
 	electrode.h = 2000.0

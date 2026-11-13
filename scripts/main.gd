@@ -10,7 +10,7 @@ const JUMP_DURATION: float = RushTuning.JUMP_DURATION
 const JUMP_ARC: float = RushTuning.JUMP_ARC
 const PIXELS_PER_METRE: float = RushTuning.PIXELS_PER_METRE
 const PLAYER_RADIUS: float = 20.0
-const RESUME_SCHEMA: int = 4
+const RESUME_SCHEMA: int = 5
 const CENTER_WALL_LEFT := RushTuning.CENTER_WALL_LEFT
 const CENTER_WALL_RIGHT := RushTuning.CENTER_WALL_RIGHT
 
@@ -85,10 +85,10 @@ func _update_layout() -> void:
 	_update_camera(0.0)
 
 func speed_at(height: float) -> float:
-	return RushTuning.speed_at(height)
+	return RushTuning.speed_at(height, world_id)
 
 func current_speed() -> float:
-	return RushTuning.run_speed_at(max_height_px, run_time)
+	return RushTuning.run_speed_at(max_height_px, run_time, world_id)
 
 func _apply_settings() -> void:
 	if environment != null:
@@ -244,7 +244,7 @@ func _begin_center_event() -> void:
 		var predicted_height := max_height_px
 		var duration := RushTuning.CENTER_PREVIEW_SECONDS + RushTuning.CENTER_ENTER_SECONDS + RushTuning.CENTER_RIDE_SECONDS + RushTuning.CENTER_EXIT_SECONDS + 0.65
 		for step in range(ceili(duration * 60.0)):
-			predicted_height += RushTuning.run_speed_at(predicted_height, run_time + float(step) / 60.0) / 60.0
+			predicted_height += RushTuning.run_speed_at(predicted_height, run_time + float(step) / 60.0, world_id) / 60.0
 		course.begin_safe_section(max_height_px - 900.0, predicted_height + 350.0)
 
 func _tick_center_event(delta: float) -> void:
@@ -478,7 +478,6 @@ func _start_run(quick: bool) -> void:
 	camera_height = 0.0
 	run_seed = int(randi())
 	run_id = "%d-%d-%d" % [Time.get_unix_time_from_system(), Time.get_ticks_usec(), run_seed]
-	course.challenge_level = Progress.get_level()
 	course.setup(run_seed, world_id)
 	course.ensure_ahead(0.0, 0.0)
 	course.visible = true
@@ -496,7 +495,7 @@ func _start_run(quick: bool) -> void:
 	Audio.play_sound("quake")
 
 func _summary() -> Dictionary:
-	return {"run_id": run_id, "height": max_height_px / PIXELS_PER_METRE, "coins": run_coins, "jumps": run_jumps, "passed": run_passed}
+	return {"run_id": run_id, "world_id": world_id, "height": max_height_px / PIXELS_PER_METRE, "coins": run_coins, "jumps": run_jumps, "passed": run_passed}
 
 func _die(cause: String = "impact") -> void:
 	if state != State.RUNNING:
@@ -582,7 +581,6 @@ func _restore_run() -> void:
 	center_entry_x = clampf(float(saved_center.get("entry_x", LEFT_X)), LEFT_X, RIGHT_X)
 	center_lane_x = CENTER_WALL_LEFT - 26.0 if center_origin_side == -1 else CENTER_WALL_RIGHT + 26.0
 	save_clock = 0.0
-	course.challenge_level = Progress.get_level()
 	course.setup(run_seed, world_id)
 	course.restore(saved.course)
 	course.ensure_ahead(max_height_px, run_time)
@@ -615,6 +613,7 @@ func _cash_out_saved_run() -> void:
 		return
 	Progress.finish_run({
 		"run_id": str(saved.get("run_id", "")),
+		"world_id": str(saved.get("world_id", "jungle")),
 		"height": float(saved.get("max_height_px", 0.0)) / float(saved.get("pixels_per_metre", 28.0)),
 		"coins": int(saved.get("coins", 0)), "jumps": int(saved.get("jumps", 0)),
 		"passed": int(saved.get("passed", 0))

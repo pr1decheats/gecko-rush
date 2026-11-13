@@ -18,8 +18,15 @@ jobs:
     if: ${{ github.event.repository.private == false }}
     runs-on: macos-15-intel
     timeout-minutes: 30
+    # The only repository write below creates a draft release for human review.
+    permissions:
+      contents: write
     env:
       GODOT_VERSION: 4.6.3
+      RELEASE_VERSION: "2.3.0"
+      RELEASE_BUILD: "5"
+      RELEASE_TAG: v2.3.0
+      RELEASE_BASENAME: GeckoRush-2.3
     defaults:
       run:
         shell: bash
@@ -38,6 +45,75 @@ jobs:
             "GECKO_IOS_STAGING_DIR=$RUNNER_TEMP/gecko-rush-ios-source" \
             "IOS_EXPORT_ROOT=$RUNNER_TEMP/gecko-rush-ios-output" \
             "IOS_DERIVED_DATA=$RUNNER_TEMP/gecko-rush-ios-derived" >> "$GITHUB_ENV"
+
+      - name: Assemble and verify frozen signed Android APK
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+
+          source = Path(os.environ["GITHUB_WORKSPACE"]) / ".github/release-assets/android"
+          manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
+          expected_name = os.environ["RELEASE_BASENAME"] + ".apk"
+          if manifest.get("filename") != expected_name or manifest.get("version") != os.environ["RELEASE_VERSION"]:
+              raise SystemExit("Frozen APK manifest filename/version does not match this release")
+          def checked_size(value):
+              if type(value) is not int or value <= 0:
+                  raise SystemExit("Manifest sizes must be positive integers")
+              return value
+          def checked_digest(value):
+              if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+                  raise SystemExit("Manifest digests must be lowercase SHA-256 values")
+              return value
+          expected_size = checked_size(manifest.get("size"))
+          expected_digest = checked_digest(manifest.get("sha256"))
+          parts = manifest.get("parts")
+          if not isinstance(parts, list) or not 1 <= len(parts) <= 16:
+              raise SystemExit("Frozen APK manifest must list its ordered parts")
+          output = Path(os.environ["IOS_EXPORT_ROOT"])
+          output.mkdir(parents=True, exist_ok=True)
+          apk = output / expected_name
+          temporary = output / (expected_name + ".tmp")
+          overall = hashlib.sha256()
+          total, seen = 0, set()
+          try:
+              with temporary.open("wb") as destination:
+                  for part in parts:
+                      name = part.get("file", "")
+                      if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.bin", name) or name in seen:
+                          raise SystemExit("Unsafe or duplicate frozen APK part filename")
+                      seen.add(name)
+                      size = checked_size(part.get("size"))
+                      digest = checked_digest(part.get("sha256"))
+                      if size >= 19 * 1024 * 1024:
+                          raise SystemExit("Frozen APK parts must each be smaller than 19 MiB")
+                      path = source / name
+                      if not path.is_file() or path.is_symlink() or path.stat().st_size != size:
+                          raise SystemExit(f"Frozen APK part missing or wrong size: {name}")
+                      actual = hashlib.sha256()
+                      copied = 0
+                      with path.open("rb") as handle:
+                          for block in iter(lambda: handle.read(1024 * 1024), b""):
+                              actual.update(block)
+                              overall.update(block)
+                              destination.write(block)
+                              copied += len(block)
+                      if copied != size or actual.hexdigest() != digest:
+                          raise SystemExit(f"Frozen APK part checksum failed: {name}")
+                      total += copied
+              if total != expected_size or overall.hexdigest() != expected_digest:
+                  raise SystemExit("Assembled Android APK does not match frozen size/SHA-256")
+              temporary.replace(apk)
+          finally:
+              temporary.unlink(missing_ok=True)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write(f"ANDROID_APK_PATH={apk}\nANDROID_APK_SHA256={expected_digest}\n")
+          print(f"Verified frozen Android APK: {apk.name}, {total} bytes, SHA256 {expected_digest}")
+          PY
 
       - name: Download and verify official Godot and export templates
         run: |
@@ -116,8 +192,8 @@ jobs:
               raise SystemExit("Built app has an unexpected bundle identifier")
           if "iPhoneOS" not in info.get("CFBundleSupportedPlatforms", []):
               raise SystemExit("Built app is not an iPhoneOS device build")
-          if info.get("CFBundleShortVersionString") != "2.2.0" or info.get("CFBundleVersion") != "4":
-              raise SystemExit("Built app version does not match Gecko Rush 2.2.0 (4)")
+          if info.get("CFBundleShortVersionString") != os.environ["RELEASE_VERSION"] or info.get("CFBundleVersion") != os.environ["RELEASE_BUILD"]:
+              raise SystemExit("Built app version/build does not match this release")
           executable_name = info.get("CFBundleExecutable", "")
           if not executable_name or Path(executable_name).name != executable_name:
               raise SystemExit("Built Info.plist has no safe CFBundleExecutable")
@@ -152,7 +228,7 @@ jobs:
           digest = hashlib.sha256(ipa.read_bytes()).hexdigest()
           details = (
               "Gecko Rush: unsigned iPhoneOS IPA\n"
-              "Version: 2.2.0 (4)\n"
+              f"Version: {os.environ['RELEASE_VERSION']} ({os.environ['RELEASE_BUILD']})\n"
               f"Source commit: {os.environ.get('GITHUB_SHA', 'unknown')}\n"
               f"Godot: {os.environ['GODOT_VERSION']}\n"
               f"Executable: {file_info}\n"
@@ -162,6 +238,60 @@ jobs:
           (output / "build-info.txt").write_text(details, encoding="utf-8")
           print(details)
           print(f"Verified package: {ipa.name}, {ipa.stat().st_size} bytes")
+          PY
+
+      - name: Verify both mobile packages and prepare release files
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/verify_mobile.py" \
+            --ipa "$IOS_EXPORT_ROOT/GeckoRush-unsigned.ipa" \
+            --apk "$ANDROID_APK_PATH" \
+            --apk-sha256 "$ANDROID_APK_SHA256" \
+            --version "$RELEASE_VERSION" \
+            --build "$RELEASE_BUILD" | tee "$IOS_EXPORT_ROOT/mobile-verification.json"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import shutil
+
+          output = Path(os.environ["IOS_EXPORT_ROOT"])
+          basename = os.environ["RELEASE_BASENAME"]
+          ipa_name, apk_name = basename + "-unsigned.ipa", basename + ".apk"
+          shutil.copyfile(output / "GeckoRush-unsigned.ipa", output / ipa_name)
+          with (output / "build-info.txt").open("a", encoding="utf-8") as handle:
+              handle.write(
+                  f"Android APK: {apk_name}\n"
+                  f"Android SHA256: {os.environ['ANDROID_APK_SHA256']}\n"
+                  "Frozen signed Android release; CI did not rebuild or re-sign it.\n"
+                  "Portable package verification: PASS; all 12 compiled game scripts match byte for byte.\n"
+              )
+          (output / "README-Sideloadly.txt").write_text(
+              "Gecko Rush mobile installation\n\n"
+              f"Android: download {apk_name} and open it on your Android device. Allow this download source to install apps when Android asks.\n\n"
+              f"iPhone: {ipa_name} is a real arm64 iPhoneOS app for iOS 14+, supplied unsigned. "
+              "Use the free Sideloadly desktop application on your own Mac or Windows PC to sign and install it. "
+              "Enter your Apple ID only in the local signing tool. Trust your developer profile on the iPhone; "
+              "iOS 16+ may require Developer Mode. Free personal profiles usually expire after seven days and require re-signing.\n\n"
+              "No Apple account credentials, Apple signing certificates, provisioning profiles or Android private keystores are included in this repository or release.\n"
+              "SHA256SUMS records the downloaded release files. build-info.txt records source and build details.\n",
+              encoding="utf-8",
+          )
+          names = [ipa_name, apk_name, "build-info.txt", "README-Sideloadly.txt"]
+          checksums = []
+          for name in names:
+              digest = hashlib.sha256()
+              with (output / name).open("rb") as handle:
+                  for block in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(block)
+              checksums.append(f"{digest.hexdigest()}  {name}\n")
+          (output / "SHA256SUMS").write_text("".join(checksums), encoding="utf-8")
+          (output / "release-notes.md").write_text(
+              f"Gecko Rush {os.environ['RELEASE_VERSION']} ({os.environ['RELEASE_BUILD']}).\n\n"
+              "Android APK and unsigned native iPhone IPA. See README-Sideloadly.txt for installation and SHA256SUMS for checksums.\n\n"
+              "Draft pending independent download verification before publication.\n",
+              encoding="utf-8",
+          )
           PY
 
       - name: Upload unsigned IPA
@@ -183,3 +313,44 @@ jobs:
           path: ${{ env.IOS_EXPORT_ROOT }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Create draft mobile release for independent verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # An existing release or tag must never be reused or overwritten.
+          python3 - <<'PY'
+          import os
+          import urllib.error
+          import urllib.request
+
+          repository, tag = os.environ["GITHUB_REPOSITORY"], os.environ["RELEASE_TAG"]
+          base = os.environ["GITHUB_API_URL"].rstrip("/")
+          for endpoint in (f"repos/{repository}/releases/tags/{tag}", f"repos/{repository}/git/ref/tags/{tag}"):
+              request = urllib.request.Request(
+                  f"{base}/{endpoint}",
+                  headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                           "Accept": "application/vnd.github+json",
+                           "X-GitHub-Api-Version": "2022-11-28"},
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30):
+                      pass
+              except urllib.error.HTTPError as error:
+                  if error.code == 404:
+                      continue
+                  raise SystemExit(f"Cannot safely check release/tag {tag}: HTTP {error.code}") from error
+              raise SystemExit(f"Refusing to overwrite existing release or tag {tag}")
+          PY
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "Gecko Rush $RELEASE_VERSION" \
+            --notes-file "$IOS_EXPORT_ROOT/release-notes.md" \
+            "$IOS_EXPORT_ROOT/$RELEASE_BASENAME-unsigned.ipa" \
+            "$ANDROID_APK_PATH" \
+            "$IOS_EXPORT_ROOT/SHA256SUMS" \
+            "$IOS_EXPORT_ROOT/build-info.txt" \
+            "$IOS_EXPORT_ROOT/README-Sideloadly.txt"

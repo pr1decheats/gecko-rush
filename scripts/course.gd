@@ -18,15 +18,27 @@ const KEEP_BEHIND := 1900.0
 const VALIDATION_RADIUS := 30.0
 const SPIKE_REACH := 84.0
 const MAX_SPEED := 2700.0
-const TYPES := ["stone", "insect", "saw", "electric", "falling", "crystal", "pendulum", "vine"]
+# A biome owns its silhouettes, movement vocabulary and structure weights.
+# These are deliberately disjoint; legacy generic kinds are restore-only.
 const WORLD_TYPES := {
-	"jungle": ["stone", "insect", "saw", "electric", "falling", "pendulum", "vine"],
-	"canyon": ["stone", "saw", "electric", "falling", "crystal", "pendulum"],
-	"ice": ["stone", "insect", "electric", "falling", "crystal", "pendulum"],
-	"crystal": ["insect", "saw", "electric", "crystal", "pendulum"],
-	"volcano": ["stone", "saw", "electric", "falling", "crystal", "pendulum"],
-	"sky": ["insect", "saw", "electric", "falling", "pendulum", "vine"],
+	"jungle": ["root", "beetle", "vine", "thorns"],
+	"canyon": ["boulder", "rockfall", "canyon_weight", "sand_spur"],
+	"ice": ["icicle", "ice_chunk", "frost", "ice_teeth"],
+	"crystal": ["prism", "crystal_beam", "shard", "crystal_teeth"],
+	"volcano": ["lava_orb", "fire_jet", "obsidian", "magma_teeth"],
+	"sky": ["lightning", "storm_orb", "wind_blade", "storm_spikes"],
 }
+const WORLD_LAYOUTS := {
+	"jungle": [0, 0, 1, 3, 5, 5, 6], # Brambles, hanging vines, beetle patrols.
+	"canyon": [0, 2, 2, 3, 5, 6, 6, 7], # Rockfall columns and swinging weights.
+	"ice": [0, 1, 4, 7, 7, 8, 8], # Staggered icicles and frost cross-currents.
+	"crystal": [1, 4, 4, 8, 8, 9, 9], # Split prisms and refracted beam relays.
+	"volcano": [0, 1, 2, 5, 7, 9, 9, 9], # Vertical vents, lava pulses, obsidian.
+	"sky": [1, 4, 6, 8, 9, 9, 10], # Charged orbs, lightning and diagonal gusts.
+}
+const WORLD_WALL_KIND := {"jungle": "thorns", "canyon": "sand_spur", "ice": "ice_teeth", "crystal": "crystal_teeth", "volcano": "magma_teeth", "sky": "storm_spikes"}
+const WORLD_ATTACHED_KIND := {"jungle": "root", "canyon": "boulder", "ice": "icicle", "crystal": "prism", "volcano": "fire_jet", "sky": "lightning"}
+const WORLD_SIGNATURE_KIND := {"jungle": "vine", "canyon": "canyon_weight", "ice": "icicle", "crystal": "crystal_beam", "volcano": "fire_jet", "sky": "wind_blade"}
 const SAFE_SECTION_PADDING := 180.0
 
 static var _texture_cache: Dictionary = {}
@@ -58,6 +70,7 @@ var _layout_deck: Array[int] = []
 var _last_layout := -1
 var _recent_types: Array[String] = []
 var _side_streak := 0
+var _profile: Dictionary = {}
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -72,6 +85,7 @@ func setup(value: int, selected_world: String = "jungle") -> void:
 	seed_value = value
 	rng.seed = value
 	world_id = selected_world if WORLD_TYPES.has(selected_world) else "jungle"
+	_profile = RushTuning.profile_for(world_id)
 	hazards.clear()
 	coins.clear()
 	flies.clear()
@@ -108,8 +122,11 @@ func _set_palette() -> void:
 	rock_color = Color(colors[2])
 	accent_color = Color(colors[3])
 
-static func speed_at(height_px: float) -> float:
-	return RushTuning.speed_at(height_px)
+static func speed_at(height_px: float, selected_world: String = "jungle") -> float:
+	return RushTuning.speed_at(height_px, selected_world)
+
+func _world_speed_at(height_px: float) -> float:
+	return RushTuning.speed_at(height_px, world_id)
 
 func begin_safe_section(start_height: float, end_height: float) -> void:
 	# Clear existing lookahead as well as suppressing future generation. The
@@ -178,10 +195,12 @@ func ensure_ahead(height_px: float, run_time: float) -> void:
 func _generate_cell() -> void:
 	var start := next_cell
 	var intro := start < INTRO_METRES * RushTuning.PIXELS_PER_METRE
-	var cell_height := float(INTRO_CELL_HEIGHTS[generated_cells % INTRO_CELL_HEIGHTS.size()]) if intro else CELL_HEIGHT
+	var base_height := float(INTRO_CELL_HEIGHTS[generated_cells % INTRO_CELL_HEIGHTS.size()]) if intro else CELL_HEIGHT
+	var cell_height := snappedf(base_height * float(_profile["spacing_scale"]), 1.0 / 1024.0)
 	var previous_side := route_side
 	var breathing := not intro and generated_cells > 3 and generated_cells % 11 == 10
-	var switch_side := generated_cells == 0 or _side_streak >= 2 or rng.randf() < 0.62
+	var switch_chance := 0.48 + float(_profile["motion_scale"]) * 0.14
+	var switch_side := generated_cells == 0 or _side_streak >= 2 or rng.randf() < switch_chance
 	if switch_side and not breathing:
 		route_side = 1 - route_side
 		_side_streak = 0
@@ -194,56 +213,82 @@ func _generate_cell() -> void:
 	}
 	var candidates: Array = []
 	var layout := 0 if generated_cells == 0 else _next_layout()
+	if generated_cells == 0:
+		_last_layout = layout
 	action["layout"] = layout
 	if not breathing:
 		match layout:
-			0: # One wall obstacle: no obligatory floating platform beside it.
-				candidates.append(_wall_spikes(start, rng.randf_range(930.0, 1020.0), rng.randf_range(46.0, 70.0)))
-			1: # A free-floating hazard, with both wall lanes unobstructed.
+			0: # One themed wall outcrop, with a broad opposite lane.
+				candidates.append(_wall_spikes(start, cell_height * 0.83, rng.randf_range(40.0, 64.0)))
+			1: # A biome's free-moving patrol, rock or shard.
 				candidates.append(_central_hazard(_choose_type(), start))
-			2: # Two different heights, deliberately avoiding a spike/platform row.
-				var floating := _central_hazard(_choose_type(), start)
-				floating["h"] = start + 920.0
-				candidates.append(floating)
-				candidates.append(_wall_spikes(start, 1045.0, 32.0))
-			3: # A stepped pair of short wall clusters.
-				candidates.append(_wall_spikes(start, 885.0, 32.0))
-				candidates.append(_wall_spikes(start, 1040.0, 32.0))
-			4: # Small offset islands; their positions never make a cross-wall bar.
+			2: # A rockfall/lava island followed by a separate wall outcrop.
+				candidates.append(_central_hazard("rockfall" if world_id == "canyon" else "lava_orb", start))
+				candidates.append(_wall_spikes(start, cell_height * 0.93, 30.0))
+			3: # Two short bramble / stone clusters on the unsafe wall.
+				candidates.append(_wall_spikes(start, cell_height * 0.77, 28.0))
+				candidates.append(_wall_spikes(start, cell_height * 0.93, 28.0))
+			4: # Offset islands; never a bar across both wall lanes.
 				for index in range(2):
 					var island := _central_hazard(_choose_type(), start)
-					island["x"] = rng.randf_range(420.0, 455.0) if index == 0 else rng.randf_range(625.0, 660.0)
-					island["h"] = start + 900.0 + float(index) * 140.0
-					island["r"] = 11.0 if String(island["kind"]) == "electric" else 25.0
-					island["amplitude"] = 12.0
-					island["fall_range"] = 30.0
-					island["half_width"] = 24.0
-					island["half_height"] = 20.0
-					island["scale"] = 0.62
+					_scale_hazard(island, 0.68)
+					island["x"] = 430.0 if index == 0 else 650.0
 					candidates.append(island)
-			5: # A bramble/crystal outcrop attached to the unsafe wall.
-				var allowed: Array = WORLD_TYPES[world_id]
-				var kind := "vine" if allowed.has("vine") else ("stone" if allowed.has("stone") else "crystal")
-				var attached := _central_hazard(kind, start)
-				attached["x"] = WALL_LEFT + 45.0 if route_side == 1 else WALL_RIGHT - 45.0
-				attached["amplitude"] = 0.0
+			5: # Roots / vents emerge from the wall the witness has left.
+				var attached := _central_hazard(String(WORLD_ATTACHED_KIND[world_id]), start)
+				attached["x"] = WALL_LEFT + 36.0 if route_side == 1 else WALL_RIGHT - 36.0
+				attached["motion_x"] = 0.0
 				attached["wall_attached"] = true
 				attached["side"] = 1 - route_side
 				candidates.append(attached)
-			6: # A swinging weight or faceted island, independently of wall spikes.
-				var allowed: Array = WORLD_TYPES[world_id]
-				var kind := "pendulum" if allowed.has("pendulum") else _choose_type()
+			6: # A suspended jungle vine / canyon weight / storm gust.
+				candidates.append(_central_hazard(String(WORLD_SIGNATURE_KIND[world_id]), start))
+			7: # Falling columns have separate x lanes and opposing phases.
+				var kind := "rockfall" if world_id == "canyon" else ("icicle" if world_id == "ice" else "fire_jet")
+				for index in range(2):
+					var column := _central_hazard(kind, start)
+					_scale_hazard(column, 0.76)
+					column["x"] = 445.0 if index == 0 else 635.0
+					column["phase"] = float(index) * PI
+					candidates.append(column)
+			8: # A diagonal shard / frost / gust relay, not wall spikes.
+				var kind := "frost" if world_id == "ice" else ("shard" if world_id == "crystal" else "wind_blade")
+				for index in range(2):
+					var relay := _central_hazard(kind, start)
+					_scale_hazard(relay, 0.64)
+					relay["x"] = 425.0 if index == 0 else 655.0
+					relay["angle"] = -0.35 if index == 0 else 0.35
+					candidates.append(relay)
+			9: # One readable, pulsing beam / vent / lightning strike.
+				var kind := "crystal_beam" if world_id == "crystal" else ("fire_jet" if world_id == "volcano" else "lightning")
 				candidates.append(_central_hazard(kind, start))
-	for item: Dictionary in candidates:
+			10: # The sky's charged orb and a small crosswind at different x.
+				var orb := _central_hazard("storm_orb", start)
+				_scale_hazard(orb, 0.72)
+				orb["x"] = 430.0
+				candidates.append(orb)
+				var gust := _central_hazard("wind_blade", start)
+				_scale_hazard(gust, 0.62)
+				gust["x"] = 650.0
+				candidates.append(gust)
+	# Full motion envelopes sit after a complete selected-world jump and
+	# before the next possible jump. This certificate includes every night
+	# phase, not just the phase at which the cell happened to stream in.
+	var jump_limit := _jump_ceiling(float(action["height_px"])) + VALIDATION_RADIUS + 8.0
+	for index in range(candidates.size()):
+		var item: Dictionary = candidates[index]
 		_cache_geometry(item)
-		if intro:
-			# Keep the complete motion envelope between the latest possible
-			# 2700px/s jump and the next cell's radius-padded witness. Even
-			# the shortest intro cell fits the largest falling-rock envelope.
-			var extent := float(item["_ey"])
-			var jump_limit := start + 84.0 + MAX_SPEED * JUMP_DURATION + JUMP_ARC + VALIDATION_RADIUS + 4.0
-			item["h"] = clampf(float(item["h"]), jump_limit + extent, start + cell_height - VALIDATION_RADIUS - 4.0 - extent)
-			_cache_geometry(item)
+		var extent := float(item["_ey"])
+		var low := jump_limit + extent
+		var high := start + cell_height - VALIDATION_RADIUS - 8.0 - extent
+		if high < low:
+			# Profiles can be tuned independently without creating a forced trap.
+			cell_height = ceilf((cell_height + low - high) * 1024.0) / 1024.0
+			action["cell_end"] = start + cell_height
+			high = low
+		var fraction := float(index + 1) / float(candidates.size() + 1)
+		item["h"] = lerpf(low, high, fraction)
+		_cache_geometry(item)
 	for i in range(candidates.size() - 1, -1, -1):
 		var item: Dictionary = candidates[i]
 		if _safe_span_intersects(float(item["h"]) - float(item["_ey"]), float(item["h"]) + float(item["_ey"])):
@@ -259,41 +304,48 @@ func _generate_cell() -> void:
 	next_cell += cell_height
 
 func _next_layout() -> int:
-	# A local Fisher-Yates deck uses this course's RNG, never the global RNG.
-	# Every seven cells show all structures, with no repeated bag boundary.
+	# Weighted biome bags keep characteristic structures frequent. Removing
+	# a different card at a duplicate boundary also handles duplicate weights.
 	if _layout_deck.is_empty():
-		_layout_deck.assign([0, 1, 2, 3, 4, 5, 6])
+		_layout_deck.assign(WORLD_LAYOUTS[world_id])
 		for i in range(_layout_deck.size() - 1, 0, -1):
 			var j := rng.randi_range(0, i)
 			var temporary := _layout_deck[i]
 			_layout_deck[i] = _layout_deck[j]
 			_layout_deck[j] = temporary
-		if _layout_deck.back() == _last_layout:
-			var temporary := _layout_deck[0]
-			_layout_deck[0] = _layout_deck[_layout_deck.size() - 1]
-			_layout_deck[_layout_deck.size() - 1] = temporary
-	_last_layout = _layout_deck.pop_back()
+	var index := _layout_deck.size() - 1
+	while index >= 0 and _layout_deck[index] == _last_layout:
+		index -= 1
+	if index < 0:
+		# A bag containing only the previous weighted card is carried forward.
+		var alternatives: Array = WORLD_LAYOUTS[world_id].duplicate()
+		alternatives.erase(_last_layout)
+		for i in range(alternatives.size() - 1, -1, -1):
+			if int(alternatives[i]) == _last_layout:
+				alternatives.remove_at(i)
+		_last_layout = int(alternatives[rng.randi_range(0, alternatives.size() - 1)])
+		return _last_layout
+	_last_layout = _layout_deck[index]
+	_layout_deck.remove_at(index)
 	return _last_layout
 
 func _wall_spikes(start: float, offset: float, half_height: float) -> Dictionary:
-	var item := {
-		"kind": "spikes", "x": WALL_LEFT if route_side == 1 else WALL_RIGHT,
+	# Profile XP / challenge_level never changes obstacle physics.
+	return {"kind": String(WORLD_WALL_KIND[world_id]), "shape": "spikes",
+		"x": WALL_LEFT if route_side == 1 else WALL_RIGHT,
 		"h": start + offset, "side": 1 - route_side, "half_h": half_height,
-		"phase": rng.randf_range(0.0, TAU), "passed": false,
-	}
-	if challenge_level >= 8 and generated_cells > 10 and generated_cells % 5 == 2:
-		item["kind"] = "timed"
-	return item
+		"phase": rng.randf_range(0.0, TAU), "passed": false}
 
 func _choose_type() -> String:
 	var allowed: Array = WORLD_TYPES[world_id]
 	var choices: Array[String] = []
 	for kind: String in allowed:
-		if not _recent_types.has(kind):
+		if kind != String(WORLD_WALL_KIND[world_id]) and not _recent_types.has(kind):
 			choices.append(kind)
 	if choices.is_empty():
 		for kind: String in allowed:
-			choices.append(kind)
+			if kind != String(WORLD_WALL_KIND[world_id]):
+				choices.append(kind)
 	var chosen := choices[rng.randi_range(0, choices.size() - 1)]
 	_recent_types.append(chosen)
 	if _recent_types.size() > 2:
@@ -302,41 +354,149 @@ func _choose_type() -> String:
 
 func _central_hazard(kind: String, start: float) -> Dictionary:
 	var item := {
-		"kind": kind, "x": rng.randf_range(430.0, 650.0),
-		"h": start + rng.randf_range(920.0, 1000.0),
+		"kind": kind, "shape": "circle", "x": rng.randf_range(435.0, 645.0),
+		"h": start + rng.randf_range(900.0, 1000.0),
 		"phase": rng.randf_range(0.0, TAU), "passed": false,
-		"r": 42.0, "amplitude": 0.0, "frequency": 1.0,
+		"r": 36.0, "amplitude": 0.0, "frequency": 1.0,
+		"motion_x": 0.0, "motion_y": 0.0, "half_length": 0.0,
+		"angle": 0.0, "angle_sway": 0.0,
 	}
 	match kind:
-		"insect":
-			item["r"] = 31.0
-			item["amplitude"] = rng.randf_range(55.0, 85.0)
-			item["frequency"] = rng.randf_range(1.4, 2.2)
-		"saw":
-			item["r"] = 46.0
-			item["amplitude"] = rng.randf_range(22.0, 48.0)
-			item["frequency"] = 1.7
-		"electric":
-			item["r"] = 10.0
-			item["half_width"] = rng.randf_range(48.0, 72.0)
-			item["amplitude"] = rng.randf_range(35.0, 65.0)
-			item["frequency"] = rng.randf_range(1.0, 1.7)
-		"falling":
-			item["r"] = 39.0
-			item["fall_range"] = 100.0
-			item["frequency"] = rng.randf_range(160.0, 240.0)
-		"crystal":
-			item["r"] = 44.0
-		"pendulum":
-			item["r"] = 37.0
-			item["amplitude"] = rng.randf_range(64.0, 92.0)
-			item["frequency"] = rng.randf_range(1.0, 1.4)
+		"root":
+			item["r"] = 40.0
+		"beetle", "insect":
+			item["r"] = 29.0
+			item["motion_x"] = 56.0
+			item["motion_y"] = 12.0
+			item["frequency"] = 1.9
 		"vine":
-			item["r"] = 22.0
-			item["half_height"] = 64.0
-	var horizontal_extent := float(item["r"]) + float(item["amplitude"]) + float(item.get("half_width", 0.0))
-	item["x"] = clampf(float(item["x"]), LEFT_X + VALIDATION_RADIUS + horizontal_extent + 14.0, RIGHT_X - VALIDATION_RADIUS - horizontal_extent - 14.0)
+			item["shape"] = "capsule"
+			item["r"] = 13.0
+			item["half_length"] = 40.0
+			item["angle"] = PI * 0.5
+			item["angle_sway"] = 0.24
+			item["motion_x"] = 32.0
+			item["frequency"] = 0.9
+		"boulder", "stone":
+			item["r"] = 41.0
+			item["motion_x"] = 22.0
+			item["frequency"] = 0.8
+		"rockfall", "falling":
+			item["r"] = 36.0
+			item["motion_y"] = 42.0
+			item["frequency"] = 2.0
+		"canyon_weight", "pendulum":
+			item["r"] = 34.0
+			item["motion_x"] = 70.0
+			item["motion_y"] = 13.0
+			item["frequency"] = 1.2
+		"icicle":
+			item["shape"] = "capsule"
+			item["r"] = 14.0
+			item["half_length"] = 33.0
+			item["angle"] = PI * 0.5
+			item["motion_y"] = 32.0
+			item["frequency"] = 2.5
+		"ice_chunk":
+			item["r"] = 38.0
+			item["motion_x"] = 13.0
+			item["motion_y"] = 7.0
+			item["frequency"] = 0.65
+		"frost":
+			item["shape"] = "capsule"
+			item["r"] = 13.0
+			item["half_length"] = 38.0
+			item["motion_x"] = 54.0
+			item["motion_y"] = 9.0
+			item["frequency"] = 1.45
+		"prism", "crystal":
+			item["r"] = 38.0
+			item["motion_y"] = 9.0
+			item["frequency"] = 0.85
+		"crystal_beam":
+			item["shape"] = "capsule"
+			item["r"] = 10.0
+			item["half_length"] = 62.0
+			item["angle_sway"] = 0.25
+			item["frequency"] = 1.1
+			item["pulse_period"] = 3.1
+			item["pulse_on"] = 2.3
+		"shard":
+			item["r"] = 26.0
+			item["motion_x"] = 42.0
+			item["motion_y"] = 22.0
+			item["frequency"] = 1.8
+		"lava_orb":
+			item["r"] = 33.0
+			item["motion_x"] = 23.0
+			item["motion_y"] = 27.0
+			item["frequency"] = 1.3
+		"fire_jet":
+			item["shape"] = "capsule"
+			item["r"] = 13.0
+			item["half_length"] = 42.0
+			item["angle"] = PI * 0.5
+			item["motion_y"] = 12.0
+			item["frequency"] = 1.6
+			item["pulse_period"] = 2.5
+			item["pulse_on"] = 1.7
+		"obsidian", "saw":
+			item["r"] = 40.0
+			item["motion_x"] = 31.0
+			item["frequency"] = 1.7
+		"lightning", "electric":
+			item["shape"] = "capsule"
+			item["r"] = 10.0
+			item["half_length"] = 60.0
+			item["half_width"] = 60.0 # Retained for older electrical fixtures.
+			item["motion_x"] = 44.0
+			item["motion_y"] = 8.0
+			item["frequency"] = 1.7
+			if kind == "lightning":
+				item["pulse_period"] = 2.2
+				item["pulse_on"] = 1.65
+		"storm_orb":
+			item["r"] = 30.0
+			item["motion_x"] = 54.0
+			item["motion_y"] = 22.0
+			item["frequency"] = 1.6
+		"wind_blade":
+			item["shape"] = "capsule"
+			item["r"] = 12.0
+			item["half_length"] = 42.0
+			item["angle_sway"] = 0.3
+			item["motion_x"] = 48.0
+			item["motion_y"] = 18.0
+			item["frequency"] = 2.2
+	if kind in ["root", "boulder", "rockfall", "canyon_weight", "ice_chunk", "prism", "shard", "obsidian", "icicle", "vine", "frost", "fire_jet", "wind_blade", "crystal_beam"]:
+		item["shape"] = "polygon"
+	var motion := float(_profile.get("motion_scale", 1.0))
+	item["motion_x"] = float(item["motion_x"]) * motion
+	item["motion_y"] = float(item["motion_y"]) * motion
+	item["frequency"] = float(item["frequency"]) * motion
+	item["angle_sway"] = float(item["angle_sway"]) * motion
+	item["spin"] = 1.4 if kind == "boulder" else (2.3 if kind in ["obsidian", "saw", "ice_chunk"] else 0.0)
+	item["suspended"] = kind in ["canyon_weight", "pendulum", "vine"]
+	# Legacy callers modify amplitude directly; the same field remains live.
+	item["amplitude"] = item["motion_x"]
+	_clamp_hazard_x(item)
 	return item
+
+func _scale_hazard(item: Dictionary, amount: float) -> void:
+	for key: String in ["r", "half_length", "half_width", "motion_x", "motion_y", "amplitude"]:
+		if item.has(key):
+			item[key] = float(item[key]) * amount
+
+func _clamp_hazard_x(item: Dictionary) -> void:
+	var extent := float(item["r"]) + float(item.get("half_length", 0.0)) + float(item.get("motion_x", 0.0))
+	item["x"] = clampf(float(item["x"]), LEFT_X + VALIDATION_RADIUS + extent + 12.0, RIGHT_X - VALIDATION_RADIUS - extent - 12.0)
+
+func _jump_ceiling(jump_start: float) -> float:
+	# Selected-world ceiling at this altitude, with an altitude upper bound
+	# for all substeps of the 0.24s jump and all day/night transitions.
+	var upper_height := jump_start + float(_profile["max_speed"]) * JUMP_DURATION + JUMP_ARC
+	var speed := maxf(_world_speed_at(upper_height), float(_profile["night_speed"]))
+	return jump_start + speed * JUMP_DURATION + JUMP_ARC
 
 func _spawn_items(action: Dictionary) -> void:
 	var start := float(action["cell_start"])
@@ -346,7 +506,7 @@ func _spawn_items(action: Dictionary) -> void:
 	var safe_side := int(action["to_side"])
 	var has_coin := false
 	if generated_cells == 0:
-		var h := start + 40.0 + speed_at(start) * JUMP_DURATION * 0.5 + JUMP_ARC
+		var h := start + 40.0 + _world_speed_at(start) * JUMP_DURATION * 0.5 + JUMP_ARC
 		coins.append({"x": 540.0, "h": h, "collected": false, "phase": rng.randf_range(0.0, TAU)})
 		has_coin = true
 	elif generated_cells % 4 == 3 and rng.randf() < 0.84:
@@ -359,10 +519,21 @@ func _spawn_items(action: Dictionary) -> void:
 
 func _cache_geometry(item: Dictionary) -> void:
 	var kind := String(item["kind"])
+	var shape := String(item.get("shape", "circle"))
+	if kind in ["spikes", "timed"]:
+		shape = "spikes"
+	elif kind == "electric":
+		shape = "capsule"
+		item["half_length"] = float(item.get("half_width", 60.0))
+	elif kind == "vine" and not item.has("shape"):
+		shape = "capsule"
+		item["half_length"] = float(item.get("half_height", 64.0))
+		item["angle"] = PI * 0.5
+	item["shape"] = shape
 	var center := Vector2(float(item["x"]), -float(item["h"]))
 	var ex: float
 	var ey: float
-	if kind == "spikes" or kind == "timed":
+	if shape == "spikes":
 		ey = float(item["half_h"])
 		var side := int(item["side"])
 		var direction := 1.0 if side == 0 else -1.0
@@ -377,26 +548,31 @@ func _cache_geometry(item: Dictionary) -> void:
 		item["_triangles"] = triangles
 		item["_bounds"] = Rect2(Vector2(minf(x, x + direction * SPIKE_REACH), top), Vector2(SPIKE_REACH, ey * 2.0))
 	else:
-		ex = float(item.get("r", 42.0)) + float(item.get("amplitude", 0.0))
-		ey = float(item.get("r", 42.0))
-		if kind == "electric":
-			ex += float(item["half_width"])
-			ey += 14.0
-		elif kind == "insect":
-			ey += 16.0
-		elif kind == "falling":
-			ey += float(item["fall_range"]) * 0.5
-		elif kind == "pendulum":
-			ey += 18.0
-		elif kind == "vine":
-			ey += float(item.get("half_height", 64.0))
+		var radius := float(item.get("r", 36.0))
+		var half_length := float(item.get("half_length", 0.0))
+		var angle := float(item.get("angle", 0.0))
+		var angle_sway := float(item.get("angle_sway", 0.0))
+		ex = radius
+		ey = radius
+		if shape in ["capsule", "polygon"]:
+			if angle_sway > 0.0:
+				# A disk encloses the entire angular sweep, including endcaps.
+				ex += half_length
+				ey += half_length
+			else:
+				ex += absf(cos(angle)) * half_length
+				ey += absf(sin(angle)) * half_length
+		ex += absf(float(item.get("amplitude", item.get("motion_x", 0.0))))
+		ey += _motion_y(item)
 		item["_bounds"] = Rect2(center - Vector2(ex, ey), Vector2(ex * 2.0, ey * 2.0))
+	if shape == "polygon":
+		item["_polygon"] = _silhouette_points(kind, float(item["r"]), float(item.get("half_length", 0.0)))
 	item["_ey"] = ey
 	item["_end_h"] = float(item["h"]) + ey
 
 func _validate_cell(action: Dictionary, candidates: Array) -> bool:
-	# A constructive certificate stronger than phase sampling: all possible
-	# jump positions fit in an empty rectangle until MAX_SPEED*duration+arc.
+	# All-phase envelopes certify a corridor for the selected world's own
+	# speed curve, including its night pace and the height gained in flight.
 	var start := float(action["cell_start"])
 	var end := float(action["cell_end"])
 	var jump_start := float(action["height_px"])
@@ -404,7 +580,7 @@ func _validate_cell(action: Dictionary, candidates: Array) -> bool:
 	var to_x := LEFT_X if int(action["to_side"]) == 0 else RIGHT_X
 	var radius := VALIDATION_RADIUS
 	if from_x != to_x:
-		var jump_end := jump_start + MAX_SPEED * JUMP_DURATION + JUMP_ARC
+		var jump_end := _jump_ceiling(jump_start)
 		var flight := Rect2(Vector2(LEFT_X - radius, -jump_end - radius), Vector2(RIGHT_X - LEFT_X + radius * 2.0, jump_end - jump_start + radius * 2.0))
 		if _rect_hits_envelopes(flight, candidates):
 			return false
@@ -420,9 +596,42 @@ func _rect_hits_envelopes(rect: Rect2, items: Array) -> bool:
 			return true
 	return false
 
-func validate_witness() -> bool:
+func validate_witness(time_offset: float = 0.0) -> bool:
 	for action: Dictionary in witness:
-		if not _validate_cell(action, hazards):
+		if not _validate_cell(action, hazards) or not _validate_action_motion(action, time_offset):
+			return false
+	return true
+
+func _validate_action_motion(action: Dictionary, time_offset: float) -> bool:
+	# Match main._simulate_step: increment time, integrate selected-world
+	# run_speed_at, then add the jump arc and test the actual rendered shape.
+	var height := float(action["cell_start"])
+	var time := time_offset
+	var jump_elapsed := -1.0
+	var from_x := LEFT_X if int(action["from_side"]) == 0 else RIGHT_X
+	var to_x := LEFT_X if int(action["to_side"]) == 0 else RIGHT_X
+	var x := from_x
+	var launched := from_x == to_x
+	while height < float(action["cell_end"]):
+		if not launched and height >= float(action["height_px"]):
+			launched = true
+			jump_elapsed = 0.0
+		var dt := 1.0 / 120.0
+		# Input can arrive on any physics frame. Split the crossing frame to
+		# represent the witness's exact scheduled press rather than delaying it.
+		if not launched:
+			dt = minf(dt, maxf(0.000001, (float(action["height_px"]) - height) / RushTuning.run_speed_at(height, time + dt, world_id)))
+		time += dt
+		height += RushTuning.run_speed_at(height, time, world_id) * dt
+		if jump_elapsed >= 0.0:
+			var previous := jump_elapsed / JUMP_DURATION
+			jump_elapsed = minf(jump_elapsed + dt, JUMP_DURATION)
+			var fraction := jump_elapsed / JUMP_DURATION
+			height += (sin(fraction * PI) - sin(previous * PI)) * JUMP_ARC
+			x = lerpf(from_x, to_x, 0.5 - cos(fraction * PI) * 0.5)
+			if jump_elapsed >= JUMP_DURATION:
+				jump_elapsed = -1.0
+		if collision_at(Vector2(x, -height), time, VALIDATION_RADIUS):
 			return false
 	return true
 
@@ -432,56 +641,72 @@ func get_witness() -> Array:
 func _vertical_extent(item: Dictionary) -> float:
 	return float(item.get("_ey", item.get("r", 42.0)))
 
+func _motion_y(item: Dictionary) -> float:
+	if item.has("motion_y"):
+		return absf(float(item["motion_y"]))
+	var kind := String(item["kind"])
+	if kind == "falling":
+		return float(item.get("fall_range", 100.0)) * 0.5
+	if kind == "insect": return 16.0
+	if kind == "electric": return 14.0
+	if kind == "pendulum": return 18.0
+	return 0.0
+
 func _hazard_center(item: Dictionary, time: float) -> Vector2:
 	var center := Vector2(float(item["x"]), -float(item["h"]))
-	var kind := String(item["kind"])
 	var phase := float(item.get("phase", 0.0))
 	var frequency := float(item.get("frequency", 1.0))
-	if kind in ["insect", "saw", "electric", "pendulum"]:
-		center.x += sin(time * frequency + phase) * float(item["amplitude"])
-		if kind == "insect":
-			center.y += sin(time * 2.7 + phase) * 16.0
-		elif kind == "electric":
-			center.y += sin(time * 2.1 + phase) * 14.0
-		elif kind == "pendulum":
-			center.y += cos(time * frequency + phase) * 18.0
-	elif kind == "falling":
-		# Smooth periodic fall/return rather than the old sawtooth teleport.
-		center.y += sin(time * frequency / 70.0 + phase) * float(item["fall_range"]) * 0.5
+	if String(item["kind"]) == "falling" and not item.has("motion_y"):
+		frequency /= 70.0
+	center.x += sin(time * frequency + phase) * float(item.get("amplitude", item.get("motion_x", 0.0)))
+	# Opposite x/y phases give rocks a fall-return and insects/orbs an orbit.
+	center.y += cos(time * frequency + phase) * _motion_y(item)
 	return center
+
+func _hazard_rotation(item: Dictionary, time: float) -> float:
+	var angle := float(item.get("angle", 0.0))
+	angle += sin(time * float(item.get("frequency", 1.0)) + float(item.get("phase", 0.0))) * float(item.get("angle_sway", 0.0))
+	angle += time * float(item.get("spin", 0.0))
+	return angle
+
+func _hazard_active(item: Dictionary, time: float) -> bool:
+	if String(item["kind"]) == "timed":
+		return _timed_active(item, time)
+	if not item.has("pulse_period"):
+		return true
+	return fposmod(time + float(item["phase"]), float(item["pulse_period"])) < float(item["pulse_on"])
 
 func collision_at(point: Vector2, time: float, radius: float = 20.0) -> bool:
 	return not collision_kind_at(point, time, radius).is_empty()
 
 func collision_kind_at(point: Vector2, time: float, radius: float = 20.0) -> String:
-	# Return the kind only after the actual triangle/circle/capsule hits.
-	# The caller can choose its death effect without repeating shape checks.
+	# Shape, moving center, orientation and active phase are shared by draw.
 	var height := -point.y
 	if section_is_safe(height):
 		return ""
 	for item: Dictionary in hazards:
-		if absf(height - float(item["h"])) > float(item["_ey"]) + radius:
+		if absf(height - float(item["h"])) > float(item["_ey"]) + radius or not _hazard_active(item, time):
 			continue
 		var kind := String(item["kind"])
-		if kind == "timed" and not _timed_active(item, time):
-			continue
-		if kind == "spikes" or kind == "timed":
+		var death_kind := "electric" if kind == "electric" or kind == "lightning" or kind == "storm_orb" else kind
+		if String(item.get("shape", "circle")) == "spikes":
 			for triangle: PackedVector2Array in item["_triangles"]:
 				if _circle_polygon(point, radius, triangle):
-					return kind
+					return death_kind
 		else:
 			var center := _hazard_center(item, time)
 			var reach := radius + float(item["r"])
-			if kind == "electric":
-				var nearest := Vector2(clampf(point.x, center.x - float(item["half_width"]), center.x + float(item["half_width"])), center.y)
-				if point.distance_squared_to(nearest) <= reach * reach:
-					return kind
-			elif kind == "vine":
-				var nearest := Vector2(center.x, clampf(point.y, center.y - float(item.get("half_height", 64.0)), center.y + float(item.get("half_height", 64.0))))
-				if point.distance_squared_to(nearest) <= reach * reach:
-					return kind
-			elif point.distance_squared_to(center) <= reach * reach:
-				return kind
+			var nearest := center
+			if String(item.get("shape", "circle")) == "capsule":
+				var axis := Vector2.from_angle(_hazard_rotation(item, time))
+				var half_length := float(item.get("half_length", 0.0))
+				nearest += axis * clampf((point - center).dot(axis), -half_length, half_length)
+			if String(item.get("shape", "circle")) == "polygon":
+				var local := (point - center).rotated(-_hazard_rotation(item, time))
+				if _circle_polygon(local, radius, item["_polygon"]):
+					return death_kind
+			elif point.distance_squared_to(nearest) <= reach * reach:
+				return death_kind
 	return ""
 
 func collect_at(point: Vector2, _time: float) -> int:
@@ -500,7 +725,7 @@ func take_fly(point: Vector2, side: int) -> Dictionary:
 		if bool(fly.get("eaten", false)) or int(fly["side"]) != wanted:
 			continue
 		var ahead := float(fly["h"]) + point.y
-		if ahead >= 70.0 and ahead <= clampf(speed_at(-point.y) * 0.09 + 150.0, 210.0, 390.0) and absf(point.x - float(fly["x"])) < 60.0:
+		if ahead >= 70.0 and ahead <= clampf(_world_speed_at(-point.y) * 0.09 + 150.0, 210.0, 390.0) and absf(point.x - float(fly["x"])) < 60.0:
 			fly["eaten"] = true
 			return {"position": Vector2(float(fly["x"]), -float(fly["h"]))}
 	return {}
@@ -517,10 +742,10 @@ func snapshot() -> Dictionary:
 	var clean_hazards: Array = []
 	for item: Dictionary in hazards:
 		var clean := item.duplicate()
-		for key: String in ["_triangles", "_bounds", "_ey", "_end_h"]:
+		for key: String in ["_triangles", "_polygon", "_bounds", "_ey", "_end_h"]:
 			clean.erase(key)
 		clean_hazards.append(clean)
-	return {"version": 4, "seed": str(seed_value), "rng_state": str(rng.state),
+	return {"version": 5, "seed": str(seed_value), "rng_state": str(rng.state),
 		"world": world_id, "hazards": clean_hazards, "coins": coins.duplicate(true),
 		"flies": flies.duplicate(true), "witness": witness.duplicate(true),
 		"next_cell": next_cell, "route_side": route_side, "generated_cells": generated_cells,
@@ -533,8 +758,11 @@ func snapshot() -> Dictionary:
 func restore(data: Dictionary) -> void:
 	seed_value = int(data.get("seed", "1"))
 	world_id = String(data.get("world", "jungle"))
+	if not WORLD_TYPES.has(world_id):
+		world_id = "jungle"
+	_profile = RushTuning.profile_for(world_id)
 	challenge_level = int(data.get("challenge_level", 1))
-	if not int(data.get("version", 0)) in [2, 3, 4]:
+	if not int(data.get("version", 0)) in [2, 3, 4, 5]:
 		setup(seed_value, world_id)
 		return
 	rng.seed = seed_value
@@ -584,15 +812,15 @@ func _ensure_art() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	if not _texture_cache.has(world_id):
-		_texture_cache[world_id] = {
-			"stone": _rock_texture(), "falling": _rock_texture(), "saw": _saw_texture(),
-			"insect0": _insect_texture(0), "insect1": _insect_texture(1),
-			"electric0": _electric_texture(0), "electric1": _electric_texture(1),
-			"electric2": _electric_texture(2), "electric3": _electric_texture(3),
-			"spikes": _spike_texture(), "coin": _coin_texture(),
-			"fly0": _fly_texture(0), "fly1": _fly_texture(1),
-			"crystal": _crystal_texture(), "pendulum": _pendulum_texture(), "vine": _vine_texture(),
-		}
+		var textures := {"spikes": _spike_texture(), "coin": _coin_texture(),
+			"fly0": _fly_texture(0), "fly1": _fly_texture(1)}
+		for kind: String in WORLD_TYPES[world_id]:
+			if kind != String(WORLD_WALL_KIND[world_id]):
+				textures[kind] = _themed_texture(kind)
+		# Older snapshots and electrical regression fixtures remain drawable.
+		for kind: String in ["stone", "falling", "saw", "insect", "electric", "crystal", "pendulum"]:
+			textures[kind] = _themed_texture(kind)
+		_texture_cache[world_id] = textures
 	_art = _texture_cache[world_id]
 
 func _draw() -> void:
@@ -602,57 +830,48 @@ func _draw() -> void:
 	for item: Dictionary in hazards:
 		var kind := String(item["kind"])
 		var center := _hazard_center(item, animation_time)
-		if kind == "spikes" or kind == "timed":
+		var active := _hazard_active(item, animation_time)
+		var color := tint
+		if not active:
+			color.a = 0.24
+		if String(item.get("shape", "circle")) == "spikes":
 			var direction := 1.0 if int(item["side"]) == 0 else -1.0
-			var color := tint
-			if kind == "timed" and not _timed_active(item, animation_time):
-				color.a = 0.25
 			draw_set_transform(center, 0.0, Vector2(direction, 1.0))
 			var half_height := float(item["half_h"])
-			draw_texture_rect(_art["spikes"], Rect2(0.0, -half_height, 88.0, half_height * 2.0), false, color)
-			if kind == "timed":
-				draw_rect(Rect2(5, -89, 12, 12), Color("f4df87") if color.a > 0.5 else Color("8e6970"))
+			var teeth := maxi(2, roundi(half_height * 2.0 / 35.0))
+			var tooth_height := half_height * 2.0 / float(teeth)
+			for index in range(teeth):
+				# One cached tooth per collision triangle; no stretched tooth count.
+				draw_texture_rect(_art["spikes"], Rect2(0.0, -half_height + float(index) * tooth_height + 1.0, SPIKE_REACH, tooth_height - 2.0), false, color)
 		else:
-			var angle := animation_time * 6.0 + float(item["phase"]) if kind == "saw" else 0.0
+			var angle := _hazard_rotation(item, animation_time)
 			var radius := float(item["r"])
+			if bool(item.get("suspended", false)) and not bool(item.get("wall_attached", false)):
+				draw_set_transform(Vector2.ZERO)
+				var anchor := Vector2(float(item["x"]), -float(item["h"]) - 135.0)
+				draw_line(anchor, center, accent_color.darkened(0.6) if kind == "vine" else metal_color.darkened(0.45), 4.0)
 			draw_set_transform(center, angle)
-			match kind:
-				"stone", "falling":
-					if kind == "falling":
-						draw_rect(Rect2(-20, -68, 4, 17), Color(0.8, 0.86, 1.0, 0.25))
-						draw_rect(Rect2(9, -80, 4, 23), Color(0.8, 0.86, 1.0, 0.18))
-					var extent := 48.0 * radius / 42.0
-					draw_texture_rect(_art[kind], Rect2(-extent, -extent, extent * 2.0, extent * 2.0), false, tint)
-				"saw":
-					var extent := 62.0 * radius / 46.0
-					draw_texture_rect(_art[kind], Rect2(-extent, -extent, extent * 2.0, extent * 2.0), false, tint)
-				"insect":
-					var frame := int(animation_time * 22.0 + float(item["phase"])) % 2
-					var size := Vector2(128, 96) * radius / 31.0
-					draw_texture_rect(_art["insect%d" % frame], Rect2(-size * 0.5, size), false, tint)
-				"electric":
-					var half_width := float(item["half_width"])
-					# Paint the exact lethal capsule, including its round electrodes.
-					# Faint external sparks are decorative, never extra hit area.
-					var casing := Color("1459b0")
-					draw_line(Vector2(-half_width, 0.0), Vector2(half_width, 0.0), casing, radius * 2.0)
-					draw_circle(Vector2(-half_width, 0.0), radius, casing)
-					draw_circle(Vector2(half_width, 0.0), radius, casing)
-					var frame := int(animation_time * 12.0 + float(item["phase"]) * 2.0) % 4
-					var size := Vector2((half_width + radius) * 2.0, radius * 4.0)
-					draw_texture_rect(_art["electric%d" % frame], Rect2(-size * 0.5, size), false, Color.WHITE)
-				"crystal":
-					var extent := 46.0 * radius / 44.0
-					draw_texture_rect(_art[kind], Rect2(-extent, -extent, extent * 2.0, extent * 2.0), false, tint)
-				"pendulum":
-					var anchor := Vector2(float(item["x"]), -float(item["h"]) - 160.0) - center
-					draw_line(anchor, Vector2.ZERO, metal_color.darkened(0.5), 6.0)
-					draw_line(anchor + Vector2(1, 0), Vector2(1, 0), metal_color, 2.0)
-					var extent := 39.0 * radius / 37.0
-					draw_texture_rect(_art[kind], Rect2(-extent, -extent, extent * 2.0, extent * 2.0), false, tint)
-				"vine":
-					var extent := float(item.get("half_height", 64.0)) + float(item["r"])
-					draw_texture_rect(_art[kind], Rect2(-radius, -extent, radius * 2.0, extent * 2.0), false, tint)
+			if String(item.get("shape", "circle")) == "capsule":
+				var half_length := float(item.get("half_length", 0.0))
+				var core := _capsule_color(kind)
+				core.a = color.a
+				draw_line(Vector2(-half_length, 0), Vector2(half_length, 0), core.darkened(0.45), radius * 2.0)
+				draw_circle(Vector2(-half_length, 0), radius, core.darkened(0.45))
+				draw_circle(Vector2(half_length, 0), radius, core.darkened(0.45))
+				draw_line(Vector2(-half_length, -1), Vector2(half_length, -1), core, maxf(2.0, radius * 1.25))
+				draw_circle(Vector2(-half_length, 0), radius * 0.7, core)
+				draw_circle(Vector2(half_length, 0), radius * 0.7, core)
+				if _art.has(kind):
+					draw_texture_rect(_art[kind], Rect2(-half_length, -radius, half_length * 2.0, radius * 2.0), false, color)
+			else:
+				if _art.has(kind):
+					var extent := Vector2(radius + float(item.get("half_length", 0.0)), radius)
+					draw_texture_rect(_art[kind], Rect2(-extent, extent * 2.0), false, color)
+				if kind == "beetle" or kind == "insect":
+					# Wings stay within the same lethal body radius.
+					var flutter := sin(animation_time * 24.0) * 3.0
+					draw_line(Vector2(-radius * 0.7, -5), Vector2(-radius * 0.2, flutter), accent_color.lightened(0.3), 3.0)
+					draw_line(Vector2(radius * 0.7, -5), Vector2(radius * 0.2, -flutter), accent_color.lightened(0.3), 3.0)
 	for coin: Dictionary in coins:
 		if not bool(coin.get("collected", false)):
 			var center := Vector2(float(coin["x"]), -float(coin["h"]))
@@ -667,193 +886,189 @@ func _draw() -> void:
 			draw_texture_rect(_art["fly%d" % frame], Rect2(-16, -16, 32, 32), false, tint)
 	draw_set_transform(Vector2.ZERO)
 
+func _capsule_color(kind: String) -> Color:
+	match kind:
+		"vine": return Color("7aa94c")
+		"icicle": return Color("b6efff")
+		"frost": return Color("76d6eb")
+		"crystal_beam": return Color("ed87ff")
+		"fire_jet": return Color("ff9a28")
+		"lightning", "electric": return Color("8de9ff")
+		"wind_blade": return Color("dcfff2")
+	return danger_color
+
+static func _silhouette_points(kind: String, radius: float, half_length: float = 0.0) -> PackedVector2Array:
+	var tip := half_length + radius
+	if kind == "icicle":
+		return PackedVector2Array([Vector2(-tip, -radius * 0.72), Vector2(-tip, radius * 0.72), Vector2(half_length * 0.4, radius * 0.55), Vector2(tip, 0), Vector2(half_length * 0.4, -radius * 0.55)])
+	if kind == "fire_jet":
+		return PackedVector2Array([Vector2(-tip, 0), Vector2(-half_length * 0.5, -radius * 0.8), Vector2(-half_length * 0.1, -radius * 0.5), Vector2(half_length * 0.45, -radius), Vector2(tip, -radius * 0.3), Vector2(tip, radius * 0.3), Vector2(half_length * 0.45, radius), Vector2(-half_length * 0.1, radius * 0.6), Vector2(-half_length * 0.5, radius * 0.8)])
+	if kind == "wind_blade":
+		return PackedVector2Array([Vector2(-tip, radius * 0.45), Vector2(-half_length * 0.4, -radius * 0.7), Vector2(half_length * 0.35, -radius), Vector2(tip, -radius * 0.1), Vector2(half_length * 0.25, -radius * 0.1), Vector2(-half_length * 0.5, radius * 0.3)])
+	if kind == "crystal_beam":
+		return PackedVector2Array([Vector2(-tip, 0), Vector2(-half_length, -radius), Vector2(half_length, -radius), Vector2(tip, 0), Vector2(half_length, radius), Vector2(-half_length, radius)])
+	if kind == "frost":
+		return PackedVector2Array([Vector2(-tip, 0), Vector2(-half_length, -radius * 0.45), Vector2(-half_length * 0.35, -radius * 0.45), Vector2(-half_length * 0.12, -radius), Vector2(half_length * 0.12, -radius), Vector2(half_length * 0.35, -radius * 0.45), Vector2(half_length, -radius * 0.45), Vector2(tip, 0), Vector2(half_length, radius * 0.45), Vector2(half_length * 0.35, radius * 0.45), Vector2(half_length * 0.12, radius), Vector2(-half_length * 0.12, radius), Vector2(-half_length * 0.35, radius * 0.45), Vector2(-half_length, radius * 0.45)])
+	if kind == "vine":
+		var points := PackedVector2Array([Vector2(-tip, 0)])
+		for index in range(7):
+			var x := lerpf(-half_length, half_length, float(index) / 6.0)
+			points.append(Vector2(x, -radius * (0.95 if index % 2 == 0 else 0.32)))
+		points.append(Vector2(tip, 0))
+		for index in range(6, -1, -1):
+			var x := lerpf(-half_length, half_length, float(index) / 6.0)
+			points.append(Vector2(x, radius * (0.95 if index % 2 != 0 else 0.32)))
+		return points
+	if kind in ["prism", "crystal"]:
+		return PackedVector2Array([Vector2(0, -radius), Vector2(radius * 0.74, 0), Vector2(0, radius), Vector2(-radius * 0.74, 0)])
+	if kind == "shard":
+		return PackedVector2Array([Vector2(-radius * 0.4, -radius * 0.8), Vector2(radius, -radius * 0.42), Vector2(radius * 0.38, radius * 0.92), Vector2(-radius * 0.92, radius * 0.38)])
+	var points := PackedVector2Array()
+	for index in range(10):
+		var angle := float(index) * TAU / 10.0
+		var factor := 1.0 if index % 2 == 0 else 0.86
+		if kind == "obsidian": factor = 1.0 if index % 2 == 0 else 0.66
+		if kind == "ice_chunk": factor = 1.0 if index % 3 != 0 else 0.75
+		points.append(Vector2.from_angle(angle) * radius * factor)
+	return points
+
+func _long_polygon_texture(kind: String) -> Texture2D:
+	var image := _new_image(128, 32)
+	var ratio := 3.0
+	match kind:
+		"icicle": ratio = 33.0 / 14.0
+		"vine": ratio = 40.0 / 13.0
+		"frost": ratio = 38.0 / 13.0
+		"fire_jet": ratio = 42.0 / 13.0
+		"wind_blade": ratio = 42.0 / 12.0
+		"crystal_beam": ratio = 62.0 / 10.0
+	var points := _silhouette_points(kind, 1.0, ratio)
+	var base := _capsule_color(kind)
+	for y in range(32):
+		for x in range(128):
+			var point := Vector2((float(x) / 127.0 * 2.0 - 1.0) * (ratio + 1.0), float(y) / 31.0 * 2.0 - 1.0)
+			if not Geometry2D.is_point_in_polygon(point, points): continue
+			var color := base.lightened(0.2) if y < 15 else base.darkened(0.18)
+			var edge := false
+			for index in range(points.size()):
+				if Geometry2D.get_closest_point_to_segment(point, points[index], points[(index + 1) % points.size()]).distance_squared_to(point) < 0.012:
+					edge = true
+					break
+			if edge: color = base.darkened(0.6)
+			elif kind == "icicle":
+				if absf(point.y - 0.05) < 0.08: color = Color("f0ffff")
+				elif point.y < 0: color = Color("73bddb")
+			elif kind == "vine":
+				if absf(point.y) < 0.2: color = Color("517536")
+				elif absf(point.y) > 0.5: color = Color("b6aa67")
+			elif kind == "fire_jet":
+				if absf(point.y) < 0.34 + sin(point.x * 3.0) * 0.12: color = Color("fff2a2")
+				elif absf(point.y) > 0.65: color = Color("e45228")
+			elif kind == "wind_blade":
+				if absf(point.y + 0.4) < 0.15: color = Color("f2fff9")
+				else: color.a = 0.85
+			elif kind == "frost":
+				if x % 13 < 2 or absf(point.y) < 0.12: color = Color("eaffff")
+			elif kind == "crystal_beam":
+				if absf(point.y) < 0.16: color = Color("fff4ff")
+				elif (x / 16) % 2 == 0: color = base.lightened(0.3)
+			image.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(image)
+
+func _themed_texture(kind: String) -> Texture2D:
+	if kind in ["icicle", "vine", "frost", "fire_jet", "wind_blade", "crystal_beam"]:
+		return _long_polygon_texture(kind)
+	# Small cached pixel silhouettes carry biome-specific materials and cues.
+	# The same local polygon is used for collision, including rotating shards.
+	var image := _new_image(64, 64)
+	var polygonal := kind in ["root", "boulder", "rockfall", "canyon_weight", "ice_chunk", "prism", "shard", "obsidian", "crystal"]
+	var points := _silhouette_points(kind, 31.5)
+	var base := danger_color
+	match kind:
+		"root": base = Color("80543b")
+		"beetle", "insect": base = Color("c27c3b")
+		"boulder", "rockfall", "stone", "falling": base = Color("ad7752")
+		"canyon_weight", "pendulum": base = Color("80685d")
+		"ice_chunk": base = Color("8cd6f0")
+		"prism", "crystal": base = Color("b985ed")
+		"shard": base = Color("ef98dc")
+		"lava_orb": base = Color("f66b29")
+		"obsidian", "saw": base = Color("493b5d")
+		"storm_orb": base = Color("52647e")
+		_: base = _capsule_color(kind)
+	for y in range(64):
+		for x in range(64):
+			var point := Vector2(float(x) - 31.5, float(y) - 31.5)
+			var inside := Geometry2D.is_point_in_polygon(point, points) if polygonal else point.length_squared() <= 31.5 * 31.5
+			if not inside: continue
+			var light := clampf((-point.x - point.y) / 100.0, -0.25, 0.25)
+			var color := base.lightened(light) if light >= 0.0 else base.darkened(-light)
+			var edge := point.length() > 28.5
+			if polygonal:
+				edge = false
+				for index in range(points.size()):
+					if Geometry2D.get_closest_point_to_segment(point, points[index], points[(index + 1) % points.size()]).distance_squared_to(point) < 3.0:
+						edge = true
+						break
+			if edge: color = base.darkened(0.6)
+			elif kind == "root":
+				if (x + int(sin(float(y) * 0.18) * 7.0)) % 13 < 3: color = Color("392e28")
+				if y < 18 and x % 9 < 5: color = Color("8ba747")
+			elif kind == "beetle" or kind == "insect":
+				if absf(point.x) < 2.5 or (x / 9 + y / 11) % 4 == 0: color = Color("3d3028")
+				if y < 19 and x > 19 and x < 45: color = Color("f8e4a2")
+			elif kind in ["boulder", "rockfall", "stone", "falling"]:
+				if (y + int(point.x * 0.24)) % 17 < 3: color = base.darkened(0.28)
+				if absf(point.x - sin(point.y * 0.1) * 8.0) < 1.5 and y > 27: color = Color("4a342c")
+			elif kind in ["canyon_weight", "pendulum"]:
+				if absf(point.x) < 3.0 or absf(point.y) < 3.0: color = Color("c3a076")
+				if point.length() < 7.0: color = Color("472d25")
+			elif kind in ["ice_chunk", "prism", "shard", "crystal"]:
+				if point.x < point.y * 0.35: color = base.lightened(0.2)
+				if absf(point.x - point.y * 0.35) < 1.5: color = Color("efffff")
+				if x % 21 == 4 and y % 19 < 6: color = Color("f8e5ff")
+			elif kind in ["lava_orb", "obsidian", "saw"]:
+				if absf(sin(point.x * 0.15 + sin(point.y * 0.12))) < 0.2 or absf(point.y + point.x * 0.45) < 2.0: color = Color("ffb642")
+				if kind == "lava_orb" and point.length() < 20.0: color = Color("ffd06a")
+			elif kind == "storm_orb":
+				if absf(point.x - sin(point.y * 0.34) * 10.0) < 2.5: color = Color("d9faff")
+				if point.y < -9.0 and x % 17 < 7: color = Color("8cb0c8")
+			elif kind == "vine":
+				if (x + y / 5) % 14 < 4: color = Color("30452a")
+			elif kind == "fire_jet":
+				if absf(point.y) < 10.0 + sin(point.x * 0.3) * 4.0: color = Color("fff3a3")
+			elif kind in ["lightning", "electric", "crystal_beam", "wind_blade", "frost", "icicle"]:
+				if absf(point.y - sin(point.x * 0.35) * 7.0) < 3.0: color = Color("efffff")
+			image.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(image)
+
 func _new_image(width: int, height: int) -> Image:
 	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 	return image
 
-func _crystal_texture() -> Texture2D:
-	var image := _new_image(48, 48)
-	var outline := Color("30364c")
-	for y in range(48):
-		for x in range(48):
-			var dx := (float(x) - 23.5) / 22.0
-			var dy := (float(y) - 23.5) / 23.0
-			if absf(dx) * 0.72 + absf(dy) < 1.0:
-				var color := accent_color.lerp(rock_color, 0.22)
-				if x < 23: color = color.lightened(0.23)
-				if x > 31: color = color.darkened(0.28)
-				if absf(dx) * 0.72 + absf(dy) > 0.89: color = outline
-				if absf(float(x) - (23.5 + dy * 5.0)) < 1.1: color = accent_color.lightened(0.5)
-				image.set_pixel(x, y, color)
-	_rect(image, Rect2i(14, 16, 2, 7), Color("e0f6df"))
-	return ImageTexture.create_from_image(image)
-
-func _pendulum_texture() -> Texture2D:
-	var image := _new_image(40, 40)
-	for y in range(40):
-		for x in range(40):
-			var d := Vector2(x - 19.5, y - 19.5)
-			var radial := d.length()
-			if radial < 19.0:
-				var color := metal_color
-				if radial > 16.5: color = Color("293744")
-				elif d.x + d.y < -8.0: color = metal_color.lightened(0.32)
-				elif d.x + d.y > 9.0: color = metal_color.darkened(0.38)
-				if absf(d.x) < 3.0 or absf(d.y) < 3.0: color = rock_color.darkened(0.3)
-				if radial < 7.0: color = danger_color
-				if radial < 3.0: color = Color("ffe2a0")
-				image.set_pixel(x, y, color)
-	return ImageTexture.create_from_image(image)
-
-func _vine_texture() -> Texture2D:
-	var image := _new_image(24, 86)
-	for y in range(86):
-		var x := 10 + int(sin(float(y) * 0.14) * 2.0)
-		_rect(image, Rect2i(x - 3, y, 7, 1), Color("253c38"))
-		_rect(image, Rect2i(x - 1, y, 3, 1), accent_color.darkened(0.35))
-		if y % 11 < 4:
-			var reach := 2 + (3 - y % 11) * 2
-			_rect(image, Rect2i(x - reach, y, reach, 2), danger_color.darkened(0.15))
-			_rect(image, Rect2i(x + 2, y + 4, reach, 2), danger_color)
-		if y % 17 == 0:
-			_rect(image, Rect2i(x - 1, y, 2, 3), accent_color.lightened(0.2))
-	return ImageTexture.create_from_image(image)
-
 func _rect(image: Image, rect: Rect2i, color: Color) -> void:
 	image.fill_rect(rect.intersection(Rect2i(0, 0, image.get_width(), image.get_height())), color)
 
-func _rock_texture() -> Texture2D:
-	var image := _new_image(48, 48)
-	var outline := Color("273448")
-	for y in range(48):
-		for x in range(48):
-			var d := Vector2(float(x) - 23.5, float(y) - 23.5)
-			var angle := atan2(d.y, d.x)
-			var edge := 20.5 + sin(angle * 5.0) * 1.7 + cos(angle * 3.0) * 1.5
-			var length := d.length()
-			if length <= edge:
-				var color := outline
-				if length < edge - 2.0:
-					var light := clampf((-d.x - d.y) / 58.0, -0.3, 0.3)
-					color = rock_color.lightened(light) if light > 0.0 else rock_color.darkened(-light)
-					if (x * 17 + y * 31) % 37 < 3:
-						color = color.lightened(0.11)
-				image.set_pixel(x, y, color)
-	_rect(image, Rect2i(13, 10, 9, 2), rock_color.lightened(0.4))
-	_rect(image, Rect2i(11, 13, 3, 6), rock_color.lightened(0.25))
-	_rect(image, Rect2i(25, 24, 2, 9), rock_color.darkened(0.4))
-	_rect(image, Rect2i(27, 31, 7, 2), rock_color.darkened(0.4))
-	return ImageTexture.create_from_image(image)
-
-func _saw_texture() -> Texture2D:
-	var image := _new_image(64, 64)
-	for y in range(64):
-		for x in range(64):
-			var d := Vector2(float(x) - 31.5, float(y) - 31.5)
-			var angle := atan2(d.y, d.x)
-			var radius := 29.0 if fposmod(angle / TAU * 12.0, 1.0) < 0.5 else 24.0
-			var length := d.length()
-			if length <= radius:
-				var color := Color("283b4c")
-				if length < radius - 2.0:
-					color = metal_color.lightened(0.28 if d.y < -7.0 else 0.0)
-				if length < 19.0:
-					color = metal_color.darkened(0.28)
-				if length < 15.0:
-					color = metal_color.lightened(0.12)
-				if length < 8.0:
-					color = danger_color
-				if length < 4.0:
-					color = Color("283b4c")
-				image.set_pixel(x, y, color)
-	_rect(image, Rect2i(28, 25, 4, 2), Color("ffe9bf"))
-	return ImageTexture.create_from_image(image)
-
 func _spike_texture() -> Texture2D:
-	var image := _new_image(44, 70)
-	var outline := Color("513646")
-	for y in range(70):
-		var local := float(y % 17) / 16.0
-		var width := int((1.0 - absf(local * 2.0 - 1.0)) * 41.0)
-		for x in range(width + 1):
-			var color := danger_color
-			if x <= 1 or x >= width - 1 or local < 0.1 or local > 0.9:
-				color = outline
-			elif local < 0.48:
-				color = danger_color.lightened(0.27)
-			elif local > 0.7:
-				color = danger_color.darkened(0.2)
-			image.set_pixel(x, y, color)
-	return ImageTexture.create_from_image(image)
-
-func _insect_texture(frame: int) -> Texture2D:
-	var image := _new_image(64, 48)
-	var dark := Color("293449")
-	for side in [-1, 1]:
-		var wing_y := 13 if frame == 0 else 20
-		for y in range(wing_y - 7, wing_y + 8):
-			for x in range(5, 28):
-				var px := x if side < 0 else 63 - x
-				var nx := (float(x) - 17.0) / 12.0
-				var ny := (float(y) - float(wing_y)) / 8.0
-				if nx * nx + ny * ny < 1.0:
-					image.set_pixel(px, y, Color("b4d4d6") if x % 5 else Color("d7f3e4"))
-	_rect(image, Rect2i(22, 11, 20, 28), dark)
-	_rect(image, Rect2i(19, 18, 26, 16), dark)
-	_rect(image, Rect2i(23, 13, 18, 23), danger_color.darkened(0.05))
-	_rect(image, Rect2i(25, 15, 4, 16), danger_color.lightened(0.3))
-	_rect(image, Rect2i(31, 14, 2, 22), dark)
-	for p in [Vector2i(27, 22), Vector2i(36, 29)]:
-		_rect(image, Rect2i(p, Vector2i(3, 3)), dark)
-	_rect(image, Rect2i(24, 8, 16, 10), dark)
-	_rect(image, Rect2i(26, 10, 5, 4), Color("fff2bc"))
-	_rect(image, Rect2i(34, 10, 5, 4), Color("fff2bc"))
-	_rect(image, Rect2i(29, 4, 2, 6), dark)
-	_rect(image, Rect2i(36, 3, 2, 7), dark)
-	for x in [17, 43]:
-		_rect(image, Rect2i(x, 30, 5, 2), dark)
-		_rect(image, Rect2i(x - 1, 35, 6, 2), dark)
-	return ImageTexture.create_from_image(image)
-
-func _electric_texture(frame: int) -> Texture2D:
-	# Four tiny cached frames: no particle nodes or per-frame bolt geometry.
-	# The middle 32px contain the solid core; transparent margins hold only
-	# faint short arcs, rendered outside the physical capsule on purpose.
-	var image := _new_image(128, 64)
+	var image := _new_image(84, 32)
+	var base := danger_color
+	match world_id:
+		"jungle": base = Color("8c9148")
+		"canyon": base = Color("bd875b")
+		"ice": base = Color("b0e8f3")
+		"crystal": base = Color("c69bf4")
+		"volcano": base = Color("d57537")
+		"sky": base = Color("abcbe4")
 	for y in range(32):
-		for x in range(128):
-			var axis_x := clampf(float(x), 15.5, 111.5)
-			var distance := Vector2(float(x) - axis_x, float(y) - 15.5).length()
-			if distance <= 15.5:
-				var color := Color("164780") if distance > 13.5 else Color("237de1")
-				if y < 9 and distance < 13.5:
-					color = Color("54bdff")
-				if x > 24 and x < 103 and absf(float(y) - 15.5) < 9.0:
-					color = Color("103d7d")
-				if (x < 24 or x > 103) and distance < 11.5:
-					color = Color("7fe6ff") if y < 16 else Color("318fe9")
-				if (x < 20 or x > 107) and absf(float(y) - 15.5) < 5.5:
-					color = Color("dcfbff")
-				image.set_pixel(x, y + 16, color)
-	for x in range(22, 106):
-		var segment := float(x - 22) / 7.0
-		var first := sin(floorf(segment) * 5.0 + float(frame * 3))
-		var second := sin((floorf(segment) + 1.0) * 5.0 + float(frame * 3))
-		var bolt_y := 31 + int(lerpf(first, second, fposmod(segment, 1.0)) * 6.0)
-		_rect(image, Rect2i(x, bolt_y - 2, 1, 5), Color("2bafff"))
-		_rect(image, Rect2i(x, bolt_y, 1, 2), Color("e8fdff"))
-		if x % 19 == frame * 3:
-			_rect(image, Rect2i(x, bolt_y - 6, 2, 4), Color("87eaff"))
-	for arc in range(3):
-		var arc_x := 30 + arc * 29 + (frame * 5 + arc * 3) % 9
-		var direction := -1 if (arc + frame) % 2 == 0 else 1
-		var edge_y := 16 if direction < 0 else 47
-		for step in range(12):
-			var x := arc_x + int(sin(float(step) * 1.2 + float(frame)) * 2.0)
-			var y := edge_y + direction * step
-			_rect(image, Rect2i(x - 1, y, 3, 1), Color(0.2, 0.65, 1.0, 0.16))
-			_rect(image, Rect2i(x, y, 1, 1), Color(0.55, 0.9, 1.0, 0.5))
+		var reach := (1.0 - absf((float(y) - 15.5) / 15.5)) * 83.0
+		for x in range(int(reach) + 1):
+			var color := base.lightened(0.22) if y < 15 else base.darkened(0.15)
+			if x < 2 or float(x) > reach - 2.0: color = base.darkened(0.55)
+			elif world_id == "jungle" and (x + y * 2) % 17 < 3: color = Color("483925")
+			elif world_id == "volcano" and (x + y * 3) % 23 < 3: color = Color("ffdc66")
+			elif world_id == "sky" and y > 12 and y < 17: color = Color("efffff")
+			image.set_pixel(x, y, color)
 	return ImageTexture.create_from_image(image)
 
 func _coin_texture() -> Texture2D:

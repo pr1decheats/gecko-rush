@@ -6,15 +6,17 @@ signal achievement_unlocked(id: String)
 signal level_gained(level: int)
 
 const SAVE_VERSION: int = 3
+const PROGRESSION_RULES: int = 23
+const TUNING = preload("res://scripts/tuning.gd")
 const SKIN_PRICE: int = 100
 const ANDROID_REFRESH = preload("res://scripts/android_refresh.gd")
 const WORLDS: Array = [
-	{"id": "jungle", "name": "Джунгли", "unlock": 1, "hazards": ["spikes", "rock", "insect", "saw", "mover", "falling"]},
-	{"id": "canyon", "name": "Каменный каньон", "unlock": 5, "hazards": ["spikes", "rock", "saw", "mover", "falling"]},
-	{"id": "ice", "name": "Ледяные скалы", "unlock": 12, "hazards": ["spikes", "rock", "insect", "mover", "falling"]},
-	{"id": "crystal", "name": "Кристальные пещеры", "unlock": 20, "hazards": ["spikes", "insect", "saw", "mover"]},
-	{"id": "volcano", "name": "Вулкан", "unlock": 30, "hazards": ["spikes", "rock", "saw", "mover", "falling"]},
-	{"id": "sky", "name": "Небесные острова", "unlock": 50, "hazards": ["spikes", "insect", "saw", "mover", "falling"]}
+	{"id": "jungle", "name": "Лёгкий", "name_en": "Easy", "theme_name": "Джунгли", "unlock": 1, "previous_world": "", "required_metres": 0.0, "hazards": ["root", "beetle", "vine", "thorns"]},
+	{"id": "canyon", "name": "Обычный", "name_en": "Normal", "theme_name": "Каньон", "unlock": 5, "previous_world": "jungle", "required_metres": 300.0, "hazards": ["boulder", "rockfall", "canyon_weight", "sand_spur"]},
+	{"id": "ice", "name": "Сложный", "name_en": "Hard", "theme_name": "Лёд", "unlock": 12, "previous_world": "canyon", "required_metres": 450.0, "hazards": ["icicle", "ice_chunk", "frost", "ice_teeth"]},
+	{"id": "crystal", "name": "Эксперт", "name_en": "Expert", "theme_name": "Кристаллы", "unlock": 20, "previous_world": "ice", "required_metres": 650.0, "hazards": ["prism", "crystal_beam", "shard", "crystal_teeth"]},
+	{"id": "volcano", "name": "Кошмар", "name_en": "Nightmare", "theme_name": "Вулкан", "unlock": 30, "previous_world": "crystal", "required_metres": 850.0, "hazards": ["lava_orb", "fire_jet", "obsidian", "magma_teeth"]},
+	{"id": "sky", "name": "Безумие", "name_en": "Insane", "theme_name": "Небо", "unlock": 50, "previous_world": "volcano", "required_metres": 1100.0, "hazards": ["lightning", "storm_orb", "wind_blade", "storm_spikes"]}
 ]
 const ACHIEVEMENTS: Array = [
 	{"id": "first_jump", "name": "Первый прыжок", "title": "Первый прыжок", "description": "Перепрыгните на другую стену", "target": 1, "xp": 15},
@@ -29,12 +31,12 @@ const ACHIEVEMENTS: Array = [
 	{"id": "jumps_1000", "name": "Мастер прыжков", "title": "1 000 успешных прыжков", "description": "Совершите 1 000 успешных прыжков", "target": 1000, "xp": 120, "unlock": 25}
 ]
 const MILESTONES: Array = [
-	{"level": 1, "name": "Мир «Джунгли»"}, {"level": 3, "name": "Звание «Скалолаз»"},
-	{"level": 5, "name": "Мир «Каменный каньон»"}, {"level": 8, "name": "Сложные сочетания испытаний"},
-	{"level": 12, "name": "Мир «Ледяные скалы»"}, {"level": 15, "name": "Звание «Покоритель высот»"},
-	{"level": 20, "name": "Мир «Кристальные пещеры»"}, {"level": 25, "name": "Новые цели высоты"},
-	{"level": 30, "name": "Мир «Вулкан»"}, {"level": 40, "name": "Звание «Легенда стен»"},
-	{"level": 50, "name": "Мир «Небесные острова»"}, {"level": 75, "name": "Звание «Небесный дракон»"},
+	{"level": 1, "name": "Мир «Лёгкий»"}, {"level": 3, "name": "Звание «Скалолаз»"},
+	{"level": 5, "name": "Мир «Обычный»"},
+	{"level": 12, "name": "Мир «Сложный»"}, {"level": 15, "name": "Звание «Покоритель высот»"},
+	{"level": 20, "name": "Мир «Эксперт»"}, {"level": 25, "name": "Новые цели высоты"},
+	{"level": 30, "name": "Мир «Кошмар»"}, {"level": 40, "name": "Звание «Легенда стен»"},
+	{"level": 50, "name": "Мир «Безумие»"}, {"level": 75, "name": "Звание «Небесный дракон»"},
 	{"level": 100, "name": "Звание «Бессмертный геккон»"}
 ]
 const DAILY_DEFINITIONS: Array = [
@@ -58,7 +60,9 @@ func _ready() -> void:
 
 func _defaults() -> Dictionary:
 	return {
-		"version": SAVE_VERSION, "coins": 0, "xp": 0, "best_height": 0.0,
+		"version": SAVE_VERSION, "progression_rules": PROGRESSION_RULES,
+		"unlocked_worlds": ["jungle"], "world_stats": {}, "processed_results": {},
+		"coins": 0, "xp": 0, "best_height": 0.0,
 		"total_distance": 0.0, "runs": 0, "lifetime_coins": 0, "jumps": 0,
 		"obstacles": 0, "achievements": [], "selected_world": "jungle",
 		"settings": {"music": true, "sfx": true, "jump_sfx": true, "theme": "dark", "language": "ru", "fps": 60},
@@ -115,12 +119,47 @@ func _safe_json(value: Variant, depth: int = 0) -> Variant:
 		return value
 	return null
 
+func _sanitize_run_result(raw: Dictionary) -> Dictionary:
+	var result: Dictionary = _safe_json(raw)
+	# JSON stores all numeric values as floats. Restore result counter types so
+	# retries after reopening return the same public result as the original run.
+	for key: String in ["reward_coins", "xp", "old_level", "level", "level_bonus", "collected_coins", "height_bonus", "record_bonus"]:
+		if result.has(key):
+			result[key] = int(_number(result[key], 0))
+	if result.has("height"):
+		result["height"] = _number(result["height"], 0)
+	return result
+
 func _sanitize(raw: Dictionary) -> Dictionary:
 	var clean: Dictionary = _defaults()
 	for key: String in ["coins", "xp", "runs", "lifetime_coins", "jumps", "obstacles", "sync_revision"]:
 		clean[key] = int(_number(raw.get(key, clean[key]), float(clean[key])))
 	for key: String in ["best_height", "total_distance"]:
 		clean[key] = _number(raw.get(key, 0.0), 0.0)
+	var unlocked: Variant = raw.get("unlocked_worlds", [])
+	if unlocked is Array:
+		for id: Variant in unlocked:
+			if id is String and _world_exists(id) and not id in clean["unlocked_worlds"]:
+				clean["unlocked_worlds"].append(id)
+	# Before v2.3, XP alone unlocked worlds. Grandfather those unlocks once;
+	# new saves contain the rules marker even before their first completed run.
+	if int(_number(raw.get("progression_rules", 0), 0)) < PROGRESSION_RULES:
+		for world: Dictionary in WORLDS:
+			if int(clean["xp"]) >= xp_for_level(int(world["unlock"])) and not world["id"] in clean["unlocked_worlds"]:
+				clean["unlocked_worlds"].append(world["id"])
+	var world_stats: Variant = raw.get("world_stats", {})
+	if world_stats is Dictionary:
+		for world: Dictionary in WORLDS:
+			var id: String = world["id"]
+			var raw_stats: Variant = world_stats.get(id, {})
+			if not raw_stats is Dictionary:
+				continue
+			var stats: Dictionary = _empty_world_stats()
+			for key: String in ["best_height", "total_distance", "last_height"]:
+				stats[key] = _number(raw_stats.get(key, 0), 0)
+			for key: String in ["runs", "coins", "jumps", "obstacles", "xp"]:
+				stats[key] = int(_number(raw_stats.get(key, 0), 0))
+			clean["world_stats"][id] = stats
 	var achievements_value: Variant = raw.get("achievements", [])
 	if achievements_value is Array:
 		for value: Variant in achievements_value:
@@ -157,9 +196,14 @@ func _sanitize(raw: Dictionary) -> Dictionary:
 		for id: Variant in processed.slice(maxi(0, processed.size() - 24)):
 			if id is String:
 				clean["processed_runs"].append(id.substr(0, 128))
+	var processed_results: Variant = raw.get("processed_results", {})
+	if processed_results is Dictionary:
+		for id: String in clean["processed_runs"]:
+			if processed_results.get(id) is Dictionary:
+				clean["processed_results"][id] = _sanitize_run_result(processed_results[id])
 	var last_result: Variant = raw.get("last_result", {})
 	if last_result is Dictionary:
-		clean["last_result"] = _safe_json(last_result)
+		clean["last_result"] = _sanitize_run_result(last_result)
 	return clean
 
 func _read_valid(path: String) -> Dictionary:
@@ -187,6 +231,7 @@ func load_game() -> void:
 		loaded = _read_valid(save_file + ".bak")
 	data = loaded if not loaded.is_empty() else _defaults()
 	_refresh_day(false)
+	_refresh_world_unlocks()
 	if not is_world_unlocked(str(data["selected_world"])):
 		data["selected_world"] = "jungle"
 	_loading = false
@@ -220,6 +265,13 @@ func xp_required(level: int = -1) -> int:
 	var effective: int = get_level() if level < 1 else level
 	var n: float = float(effective - 1)
 	return 80 + 35 * (effective - 1) + int(floor(8.0 * pow(n, 1.25)))
+
+func xp_for_level(level: int) -> int:
+	var target: int = maxi(1, level)
+	while _level_thresholds.size() < target:
+		var previous_level: int = _level_thresholds.size()
+		_level_thresholds.append(_level_thresholds.back() + xp_required(previous_level))
+	return _level_thresholds[target - 1]
 
 func get_level() -> int:
 	var total: int = int(data.get("xp", 0))
@@ -259,11 +311,52 @@ func current_world() -> Dictionary:
 			return world.duplicate(true)
 	return WORLDS[0].duplicate(true)
 
-func is_world_unlocked(id: String) -> bool:
+func _empty_world_stats() -> Dictionary:
+	return {"best_height": 0.0, "total_distance": 0.0, "last_height": 0.0, "runs": 0, "coins": 0, "jumps": 0, "obstacles": 0, "xp": 0}
+
+func world_run_distances(id: String = "") -> Dictionary:
+	var world_id: String = str(data["selected_world"]) if id.is_empty() else id
+	var stats: Dictionary = data.get("world_stats", {}).get(world_id, _empty_world_stats())
+	return {"last": stats["last_height"], "best": stats["best_height"], "total": stats["total_distance"]}
+
+func world_unlock_status(id: String) -> Dictionary:
 	for world: Dictionary in WORLDS:
-		if world["id"] == id:
-			return get_level() >= int(world["unlock"])
-	return false
+		if world["id"] != id:
+			continue
+		var previous: String = world["previous_world"]
+		var best: float = float(data.get("world_stats", {}).get(previous, {}).get("best_height", 0.0))
+		var unlocked: bool = id in data.get("unlocked_worlds", ["jungle"])
+		if not unlocked:
+			unlocked = get_level() >= int(world["unlock"]) and best >= float(world["required_metres"]) and (previous.is_empty() or is_world_unlocked(previous))
+		return {"unlocked": unlocked, "level_required": int(world["unlock"]), "previous_world": previous, "required_metres": float(world["required_metres"]), "best_metres": best}
+	return {"unlocked": false, "level_required": 0, "previous_world": "", "required_metres": 0.0, "best_metres": 0.0}
+
+func is_world_unlocked(id: String) -> bool:
+	return bool(world_unlock_status(id)["unlocked"])
+
+func _refresh_world_unlocks() -> void:
+	if not data.has("unlocked_worlds"):
+		data["unlocked_worlds"] = ["jungle"]
+	for world: Dictionary in WORLDS:
+		var id: String = world["id"]
+		if is_world_unlocked(id) and not id in data["unlocked_worlds"]:
+			data["unlocked_worlds"].append(id)
+
+func world_xp_status(id: String) -> Dictionary:
+	for index: int in WORLDS.size():
+		if WORLDS[index]["id"] != id:
+			continue
+		var cap_level: int = int(WORLDS[index + 1]["unlock"]) if index + 1 < WORLDS.size() else 0
+		return {"multiplier": float(TUNING.profile_for(id)["xp_multiplier"]), "cap_level": cap_level, "capped": cap_level > 0 and int(data["xp"]) >= xp_for_level(cap_level)}
+	return {"multiplier": 0.0, "cap_level": 0, "capped": true}
+
+func _award_world_xp(amount: int, world_id: String) -> int:
+	var status: Dictionary = world_xp_status(world_id)
+	var awarded: int = maxi(0, amount)
+	if int(status["cap_level"]) > 0:
+		awarded = mini(awarded, maxi(0, xp_for_level(int(status["cap_level"])) - int(data["xp"])))
+	data["xp"] = int(data["xp"]) + awarded
+	return awarded
 
 func select_world(id: String) -> bool:
 	if not is_world_unlocked(id):
@@ -300,8 +393,16 @@ func run_distances() -> Dictionary:
 func finish_run(summary: Dictionary) -> Dictionary:
 	var run_id: String = str(summary.get("run_id", "")).substr(0, 128)
 	if not run_id.is_empty() and run_id in data["processed_runs"]:
-		return data["last_result"].duplicate(true)
+		return data.get("processed_results", {}).get(run_id, data["last_result"]).duplicate(true)
 	_refresh_day(false)
+	var world_id: String = str(summary.get("world_id", summary.get("world", data["selected_world"])))
+	if not _world_exists(world_id) or not is_world_unlocked(world_id):
+		world_id = str(data["selected_world"])
+	if not is_world_unlocked(world_id):
+		world_id = "jungle"
+	if not data.has("world_stats"):
+		data["world_stats"] = {}
+	var stats: Dictionary = data["world_stats"].get(world_id, _empty_world_stats())
 	var height: float = _number(summary.get("height", 0), 0)
 	var collected: int = int(_number(summary.get("coins", 0), 0))
 	var jumps: int = int(_number(summary.get("jumps", 0), 0))
@@ -326,7 +427,15 @@ func finish_run(summary: Dictionary) -> Dictionary:
 	data["obstacles"] = int(data["obstacles"]) + passed
 	data["coins"] = int(data["coins"]) + reward
 	data["lifetime_coins"] = int(data["lifetime_coins"]) + reward
-	data["xp"] = previous_xp + base_xp
+	base_xp = int(floor(float(base_xp) * float(TUNING.profile_for(world_id)["xp_multiplier"])))
+	_award_world_xp(base_xp, world_id)
+	stats["runs"] = int(stats["runs"]) + 1
+	stats["total_distance"] = float(stats["total_distance"]) + height
+	stats["best_height"] = maxf(float(stats["best_height"]), height)
+	stats["last_height"] = height
+	stats["jumps"] = int(stats["jumps"]) + jumps
+	stats["obstacles"] = int(stats["obstacles"]) + passed
+	data["world_stats"][world_id] = stats
 	data["daily"]["jumps"] = int(data["daily"]["jumps"]) + jumps
 	data["daily"]["coins"] = int(data["daily"]["coins"]) + collected
 	data["daily"]["height"] = maxf(float(data["daily"]["height"]), height)
@@ -341,7 +450,7 @@ func finish_run(summary: Dictionary) -> Dictionary:
 			var id: String = achievement["id"]
 			if not id in data["achievements"] and _achievement_complete(id):
 				data["achievements"].append(id)
-				data["xp"] = int(data["xp"]) + int(achievement["xp"])
+				_award_world_xp(int(achievement["xp"]), world_id)
 				new_achievements.append(id)
 				awarded = true
 		var level: int = get_level()
@@ -354,7 +463,11 @@ func finish_run(summary: Dictionary) -> Dictionary:
 			awarded = true
 		if not awarded:
 			break
+	_refresh_world_unlocks()
+	stats["coins"] = int(stats["coins"]) + reward + level_bonus
+	stats["xp"] = int(stats["xp"]) + int(data["xp"]) - previous_xp
 	var result: Dictionary = {
+		"world_id": world_id, "run_id": run_id, "xp_capped": bool(world_xp_status(world_id)["capped"]),
 		"reward_coins": reward + level_bonus, "xp": int(data["xp"]) - previous_xp,
 		"old_level": old_level, "level": get_level(), "new_best": new_best,
 		"new_achievements": new_achievements, "level_bonus": level_bonus,
@@ -363,8 +476,12 @@ func finish_run(summary: Dictionary) -> Dictionary:
 	}
 	if not run_id.is_empty():
 		data["processed_runs"].append(run_id)
+		if not data.has("processed_results"):
+			data["processed_results"] = {}
+		data["processed_results"][run_id] = result.duplicate(true)
 		if data["processed_runs"].size() > 24:
-			data["processed_runs"].pop_front()
+			var expired_id: String = str(data["processed_runs"].pop_front())
+			data["processed_results"].erase(expired_id)
 	data["resume"] = {}
 	data["last_result"] = result.duplicate(true)
 	save_game()

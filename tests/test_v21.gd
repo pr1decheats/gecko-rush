@@ -32,9 +32,9 @@ func _run() -> void:
 	check(RushTuning.PIXELS_PER_METRE == 64.0, "metre counter advances at half the old rate")
 	for height: float in [0.0, 64000.0, 256000.0]:
 		for second: float in [40.0, 45.0, 50.0, 59.99, 100.0, 119.99]:
-			check(RushTuning.run_speed_at(height, second) == RushTuning.NIGHT_SPEED, "night speed is independent of time and height")
+			check(RushTuning.run_speed_at(height, second) == 680.0, "Easy night speed is independent of time and height")
 	check(not RushTuning.is_night(39.99) and RushTuning.is_night(40.0) and RushTuning.is_night(59.99) and not RushTuning.is_night(60.0), "night lasts exactly twenty seconds")
-	check(absf(RushTuning.run_speed_at(64000, 39.999) - RushTuning.NIGHT_SPEED) < 0.01, "dusk slowdown is continuous")
+	check(absf(RushTuning.run_speed_at(64000, 39.999) - 680.0) < 0.01, "dusk slowdown reaches the selected difficulty night speed continuously")
 	var dawn_speeds: Array[float] = []
 	for second: float in [60, 61, 62, 63, 64]:
 		dawn_speeds.append(RushTuning.run_speed_at(64000, second))

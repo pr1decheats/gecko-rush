@@ -2,6 +2,8 @@ extends SceneTree
 ## Run: godot --headless --path . --script tests/test_course.gd
 
 const CourseScript = preload("res://scripts/course.gd")
+const WORLDS := ["jungle", "canyon", "ice", "crystal", "volcano", "sky"]
+const STEP := 1.0 / 120.0
 var checks := 0
 var failures := 0
 
@@ -25,7 +27,7 @@ func _run() -> void:
 		audio.call("set_music_enabled", false)
 	var covered: Dictionary = {}
 	var total_cells := 0
-	for world: String in ["jungle", "canyon", "ice", "crystal", "volcano", "sky"]:
+	for world: String in WORLDS:
 		for seed_index in range(12):
 			var course = CourseScript.new()
 			root.add_child(course)
@@ -40,24 +42,26 @@ func _run() -> void:
 				for hazard: Dictionary in course.hazards:
 					covered[String(hazard["kind"])] = true
 					var kind := String(hazard["kind"])
-					check(kind == "spikes" or kind == "timed" or course.WORLD_TYPES[world].has(kind), "World must respect its obstacle whitelist")
+					check(course.WORLD_TYPES[world].has(kind), "World must respect its themed obstacle whitelist")
 				check(_simulate_witness(course, height), "Actual-motion collision on certified path")
 			check(course.rejected_candidates == 0, "Generator should not need to discard built-in patterns")
 			total_cells += course.generated_cells
 			course.free()
-	for kind: String in ["spikes", "stone", "insect", "saw", "electric", "falling", "crystal", "pendulum", "vine"]:
-		check(covered.has(kind), "Missing obstacle type: " + kind)
+	for world: String in WORLDS:
+		for kind: String in CourseScript.WORLD_TYPES[world]:
+			check(covered.has(kind), "Missing themed obstacle type: " + kind)
+	check(covered.size() == 24, "Six worlds generate 24 distinct themed obstacle kinds")
 	_test_restore()
 	_test_collision_and_coins()
-	_test_challenge_unlock()
+	_test_world_difficulty()
 	print("COURSE TESTS: %d checks, %d failures, %d generated cells, %d obstacle kinds" % [checks, failures, total_cells, covered.size()])
 	await process_frame
 	quit(0 if failures == 0 else 1)
 
 
 func _simulate_witness(course, phase_height: float) -> bool:
-	# Geometry was validated against complete movement envelopes. This also
-	# exercises real shape collision at unrelated phases of every animation.
+	# Independently integrate the same time-dependent selected-world speed
+	# and 120Hz jump as main, at unrelated phases of every animation.
 	for action: Dictionary in course.get_witness():
 		var source_side := int(action["from_side"])
 		var target_side := int(action["to_side"])
@@ -66,27 +70,28 @@ func _simulate_witness(course, phase_height: float) -> bool:
 		var h := float(action["cell_start"])
 		var time := phase_height / 290.0 + float(action["cell_start"]) / 320.0
 		while h < float(action["height_px"]):
+			var dt := minf(STEP, maxf(0.000001, (float(action["height_px"]) - h) / RushTuning.run_speed_at(h, time + STEP, course.world_id)))
+			time += dt
+			h += RushTuning.run_speed_at(h, time, course.world_id) * dt
 			if course.collision_at(Vector2(source_x, -h), time, 28.0):
 				return false
-			h += 5.0
-			time += 5.0 / course.speed_at(h)
 		if source_side != target_side:
-			h = float(action["height_px"])
-			var previous := 0.0
-			for i in range(1, 125):
-				var t := float(i) / 124.0
-				var dt := CourseScript.JUMP_DURATION / 124.0
-				h += course.speed_at(h) * dt + (sin(PI * t) - sin(PI * previous)) * CourseScript.JUMP_ARC
-				var x := lerpf(source_x, target_x, 0.5 - 0.5 * cos(PI * t))
+			var elapsed := 0.0
+			while elapsed < CourseScript.JUMP_DURATION - 0.000001:
+				var dt := minf(STEP, CourseScript.JUMP_DURATION - elapsed)
+				var previous := elapsed / CourseScript.JUMP_DURATION
+				elapsed += dt
+				var t := elapsed / CourseScript.JUMP_DURATION
 				time += dt
+				h += RushTuning.run_speed_at(h, time, course.world_id) * dt + (sin(PI * t) - sin(PI * previous)) * CourseScript.JUMP_ARC
+				var x := lerpf(source_x, target_x, 0.5 - 0.5 * cos(PI * t))
 				if course.collision_at(Vector2(x, -h), time, 28.0):
 					return false
-				previous = t
 		while h < float(action["cell_end"]):
+			time += STEP
+			h += RushTuning.run_speed_at(h, time, course.world_id) * STEP
 			if course.collision_at(Vector2(target_x, -h), time, 28.0):
 				return false
-			h += 5.0
-			time += 5.0 / course.speed_at(h)
 	return true
 
 
@@ -137,34 +142,44 @@ func _canonical_snapshot(value: Dictionary) -> String:
 	return JSON.stringify(JSON.parse_string(JSON.stringify(value, "", false, true)), "", false, true)
 
 
-func _test_challenge_unlock() -> void:
-	var ordinary = CourseScript.new()
-	var challenge = CourseScript.new()
-	root.add_child(ordinary)
-	root.add_child(challenge)
-	ordinary.setup(441, "jungle")
-	ordinary.ensure_ahead(15000.0, 60.0)
-	challenge.challenge_level = 8
-	challenge.setup(441, "jungle")
-	challenge.ensure_ahead(15000.0, 60.0)
-	var ordinary_timed := 0
-	var challenge_timed := 0
-	for item: Dictionary in ordinary.hazards:
-		if String(item["kind"]) == "timed":
-			ordinary_timed += 1
-	for item: Dictionary in challenge.hazards:
-		if String(item["kind"]) == "timed":
-			challenge_timed += 1
-	# Timed spikes now share a shuffled deck with seven structures. Sample
-	# several streamed windows rather than requiring one in a particular row.
-	for sample in range(20, 100, 4):
-		var height := float(sample) * 1120.0
-		challenge.ensure_ahead(height, 60.0)
-		for item: Dictionary in challenge.hazards:
-			if String(item["kind"]) == "timed":
-				challenge_timed += 1
-	check(ordinary_timed == 0, "Timed spikes must stay locked below level 8")
-	check(challenge_timed > 0, "Level 8 must unlock timed-spike trials")
-	check(challenge.validate_witness(), "Unlocked timed spikes must preserve the safe route")
-	ordinary.free()
-	challenge.free()
+func _test_world_difficulty() -> void:
+	var previous_speed := 0.0
+	var previous_spacing := INF
+	var previous_motion := 0.0
+	for world: String in WORLDS:
+		var ordinary = CourseScript.new()
+		var veteran = CourseScript.new()
+		root.add_child(ordinary)
+		root.add_child(veteran)
+		ordinary.challenge_level = 1
+		veteran.challenge_level = 80
+		ordinary.setup(441, world)
+		veteran.setup(441, world)
+		ordinary.ensure_ahead(60000.0, 60.0)
+		veteran.ensure_ahead(60000.0, 60.0)
+		var first: Dictionary = ordinary.snapshot()
+		var experienced: Dictionary = veteran.snapshot()
+		first.erase("challenge_level")
+		experienced.erase("challenge_level")
+		check(_canonical_snapshot(first) == _canonical_snapshot(experienced), "Profile level must not increase physics difficulty: " + world)
+		var profile: Dictionary = RushTuning.profile_for(world)
+		check(float(profile["start_speed"]) > previous_speed, "World tier increases starting speed: " + world)
+		check(float(profile["spacing_scale"]) < previous_spacing, "World tier increases obstacle density: " + world)
+		check(float(profile["motion_scale"]) > previous_motion, "World tier increases obstacle motion: " + world)
+		check(ordinary.validate_witness(40.0), "Night route remains feasible in every tier: " + world)
+		previous_speed = float(profile["start_speed"])
+		previous_spacing = float(profile["spacing_scale"])
+		previous_motion = float(profile["motion_scale"])
+		ordinary.free()
+		veteran.free()
+	for first: String in WORLDS:
+		for second: String in WORLDS:
+			if first < second:
+				check(_canonical_snapshot(_layout_weights(first)) != _canonical_snapshot(_layout_weights(second)), "Worlds need distinct weighted course patterns: %s/%s" % [first, second])
+
+func _layout_weights(world: String) -> Dictionary:
+	var counts: Dictionary = {}
+	for layout: int in CourseScript.WORLD_LAYOUTS[world]:
+		var key := str(layout)
+		counts[key] = int(counts.get(key, 0)) + 1
+	return counts
