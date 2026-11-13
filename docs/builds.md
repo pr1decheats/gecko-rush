@@ -1,26 +1,26 @@
-# Установочные файлы Gecko Rush 2.5 — подготовка
+# Установочные файлы Gecko Rush 2.5
 
-Целевая версия — **2.5.0 (7)**. **Android собирается; IPA и новый CI ещё не запускались, публикации 2.5 нет.** Планируемые постоянные адреса ниже не подтверждают наличие файлов. Изменения сайта 2.5 пока локальные, без публикации.
+Версия **2.5.0 (7)**: APK/IPA независимо скачаны и проверены. Выпуск [v2.5.0](https://github.com/pr1decheats/gecko-rush/releases/tag/v2.5.0) опубликован **13 ноября 2026 года в 19:52:27 UTC** после независимой сверки файлов черновика; постоянные адреса подтверждены через GitHub API. После публикации оба файла повторно скачаны по постоянным адресам; размеры и SHA-256 точно совпали с независимо проверенными пакетами. [Страница скачивания](https://gecko-rush-godot-6e42.honedgrackle2.chatgpt.site): ПК — Windows 2.2, Android — 2.5, iPhone — 2.5.
 
-| Платформа | Планируемый файл | Размер, байт | Статус |
+| Платформа | Прямая загрузка | Размер, байт | Статус |
 |---|---|---:|---|
-| Android | [GeckoRush-2.5.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5.apk) | PENDING_V25_APK_SIZE | Сборка и проверка ожидаются |
-| iPhone / native arm64 | [GeckoRush-2.5-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-unsigned.ipa) | PENDING_V25_IPA_SIZE | CI и независимая проверка ожидаются |
+| Android | [GeckoRush-2.5.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5.apk) | 52 919 978 | Опубликован, независимо проверен |
+| iPhone / native arm64 | [GeckoRush-2.5-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-unsigned.ipa) | 28 229 654 | Опубликована, независимо проверена |
 | Windows x86-64 — **остаётся 2.2** | `GeckoRush-2.2-Windows.zip` | 36 342 871 | Прежний файл, без пересборки |
 
 ```text
-APK SHA-256: PENDING_V25_APK_SHA
-IPA SHA-256: PENDING_V25_IPA_SHA
-IPA Run: PENDING_V25_IPA_RUN
-Build source commit: PENDING_V25_IPA_COMMIT
+APK SHA-256: 27ff8128bf9d86dd92e7b52a599e3c154354870dadf215b70e562586efcdbb1d
+IPA SHA-256: cf8d9be660e72faf3a814bfb14cf723b2d1375856202e269a949616a10f770a2
+IPA Run: https://github.com/pr1decheats/gecko-rush/actions/runs/43495568383
+Build source commit: 590dfdb3c39e6c0716a91c9144cd619c19c14e70
 
 SHA-256 GeckoRush-2.2-Windows.zip (без изменений):
 3188db34d32deaf25568c9938988fd3183ea58308e7afbe80617da2d6f82984a
 ```
 
-До публикации нужно подтвердить версии 2.5.0 (7), подпись/CRC/alignment APK и настоящий unsigned arm64 iPhoneOS IPA, затем независимо скачать оба файла и сверить размеры/SHA-256. Планируется **13 игровых `.gdc`**, включая новый `boot.gdc`; их пути и байты должны совпасть между Android/iPhone. Прежнее число 12 и PCK-результаты 2.4 не подтверждают новый пакет.
+APK **2.5.0 (7)** независимо прошёл проверку прежнего сертификата, подписи v2/v3, ZIP CRC, 16 KB ZIP/ELF alignment, API 24/36, ARM32/64, отсутствия разрешений и `debuggable=false`. В нём подтверждены **13 игровых `.gdc`**, включая `boot.gdc`. Скачанная IPA **2.5.0 (7)** проверена отдельно: unsigned Mach-O arm64, iOS 14 / SDK 18.5, `Launch Screen`, **49 записей PCK с корректными MD5**, лицензии и все **13 игровых `.gdc` побайтно совпали с APK**. Внешний Actions ZIP прошёл SHA-256, CRC и проверку списка файлов; размеры и SHA-256 APK/IPA/build-info черновика совпали до публикации.
 
-Компактная boot-анимация реализована: 55% ширины, fade/удержание/fade-out за 2,5 с, вращение только символа 6°/с. Native engine/iOS используют новый статичный первый кадр 1080×1920 с непрозрачностью 18%; boot-тест (21) и нативный branding-прогон (29) прошли без ошибок. Локальное сравнение PNG для CI прошло; настоящий Mac-экспорт ещё ожидается. Увеличенные сосульки прошли отдельную геометрическую/визуальную проверку; упаковка графики в новые APK/IPA ещё не проверена. [Валидация](validation.md), [Android](android-build.md), [iOS CI](ios-ci.md). Физические телефоны 2.5 не проверены.
+Компактная boot-анимация реализована: 55% ширины, fade/удержание/fade-out за 2,5 с, вращение только символа 6°/с. Native engine/iOS используют новый статичный первый кадр 1080×1920 с непрозрачностью 18%; boot-тест (21) и нативный branding-прогон (29) прошли без ошибок. Локальное сравнение PNG для CI прошло; настоящий Mac-экспорт и compact launch branding прошли CI-проверку. Увеличенные сосульки прошли отдельную геометрическую/визуальную проверку; в APK компактный PNG совпал по декодированным пикселям, исходное искусство — по импортированному CTEX. Native compact branding прошло Mac CI; IPA независимо проверена. Полный нативный сценарий после заморозки PNG: 35 кадров, 0 ошибок. [Валидация](validation.md), [Android](android-build.md), [iOS CI](ios-ci.md). Физические телефоны 2.5 не проверены.
 
 ## Архив: выпуск 2.4
 

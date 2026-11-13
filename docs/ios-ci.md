@@ -1,27 +1,27 @@
-# Неподписанная iPhone IPA 2.5 — CI ожидается
+# Неподписанная iPhone IPA 2.5 — опубликована и проверена
 
-Целевая версия **2.5.0 (7)**. **Новый CI ещё не запускался, IPA 2.5 не собрана и не опубликована.**
+Версия **2.5.0 (7)** собрана в успешном [Mac CI 43495568383](https://github.com/pr1decheats/gecko-rush/actions/runs/43495568383), build source commit `590dfdb3c39e6c0716a91c9144cd619c19c14e70`, независимо скачана и проверена. Выпуск [v2.5.0](https://github.com/pr1decheats/gecko-rush/releases/tag/v2.5.0) опубликован **13 ноября 2026 года в 19:52:27 UTC** после независимой сверки файлов черновика; постоянные адреса подтверждены через GitHub API. После публикации оба файла повторно скачаны по постоянным адресам; размеры и SHA-256 точно совпали с независимо проверенными пакетами.
 
 ```text
-Run: PENDING_V25_IPA_RUN
-Build source commit: PENDING_V25_IPA_COMMIT
-Size: PENDING_V25_IPA_SIZE
-SHA-256: PENDING_V25_IPA_SHA
-Android size: PENDING_V25_APK_SIZE
-Android SHA-256: PENDING_V25_APK_SHA
+Run: https://github.com/pr1decheats/gecko-rush/actions/runs/43495568383
+Build source commit: 590dfdb3c39e6c0716a91c9144cd619c19c14e70
+Size: 28 229 654
+SHA-256: cf8d9be660e72faf3a814bfb14cf723b2d1375856202e269a949616a10f770a2
+Android size: 52 919 978
+Android SHA-256: 27ff8128bf9d86dd92e7b52a599e3c154354870dadf215b70e562586efcdbb1d
 ```
 
-Планируемая прямая загрузка после независимой проверки: [GeckoRush-2.5-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-unsigned.ipa), Android-пара — [GeckoRush-2.5.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5.apk). [Статус файлов](builds.md).
+Опубликованная прямая загрузка: [GeckoRush-2.5-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5-unsigned.ipa), Android-пара — [GeckoRush-2.5.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.5.0/GeckoRush-2.5.apk). [Статус файлов](builds.md).
 
-## До запуска и публикации 2.5
+## Выполненная сборка и проверка 2.5
 
-Реализована компактная заставка Triada Games: **55% ширины экрана**, fade-in **0,7 с**, удержание до **2,0 с** и fade-out до **2,5 с**. Только символ вращается со скоростью **6°/с**; `TRIADA` над `GAMES` остаются неподвижными. Пропуск разрешён после **0,3 с**. Нативная заставка движка и пресет iOS используют новый `assets/triada-games-launch.png` **1080×1920**: компактный первый кадр с **18% непрозрачности**, вписанный с сохранением пропорций; минимальный показ движка — **100 мс**. Исходный `triada-games.png` не изменён. Boot-тест (21) и нативная регрессия брендинга (29) прошли без ошибок; повторно просмотрены пять чистых кадров. Локальный четырёхаргументный helper подтвердил original + compact launch + две PNG-копии. Настоящий Mac-экспорт и применение checker к его результату ещё ожидаются; результаты iOS 2.4 новую композицию не подтверждают.
+Реализована компактная заставка Triada Games: **55% ширины экрана**, fade-in **0,7 с**, удержание до **2,0 с** и fade-out до **2,5 с**. Только символ вращается со скоростью **6°/с**; `TRIADA` над `GAMES` остаются неподвижными. Пропуск разрешён после **0,3 с**. Нативная заставка движка и пресет iOS используют новый `assets/triada-games-launch.png` **1080×1920**: компактный первый кадр с **18% непрозрачности**, вписанный с сохранением пропорций; минимальный показ движка — **100 мс**. Исходный `triada-games.png` не изменён. Boot-тест (21) и нативная регрессия брендинга (29) прошли без ошибок; повторно просмотрены пять чистых кадров. Локальный четырёхаргументный helper подтвердил original + compact launch + две PNG-копии. Настоящий Mac-экспорт, XML `Launch Screen` и compact PNG прошли checker в успешном CI 2.5.
 
-План сборки сохраняет ручной публичный CI на стандартном `macos-15-intel`, без Apple ID/ключей Apple. Замороженный APK должен быть проверен по частям и целиком; Xcode — собрать настоящий unsigned arm64 `iphoneos` с актуальными метаданными 2.5.0 (7). Планируется **13 игровых `.gdc`**, включая `boot.gdc`: verifier уже настроен на прежние 12 путей плюс `boot.gdc` для версий от 2.5, с сохранённой совместимостью проверенного пакета 2.4. Новый IPA ещё должен подтвердить пути/байты всех скриптов, PCK/MD5/лицензии, Mach-O и отсутствие подписи Apple.
+Ручной публичный CI на стандартном `macos-15-intel` восстановил и проверил замороженный подписанный APK, затем Xcode собрал настоящий unsigned arm64 `iphoneos` без Apple ID/ключей Apple. Независимый portable verifier подтвердил **2.5.0 (7)**, iOS 14 / SDK 18.5, отсутствие подписи Apple, **49 записей PCK с корректными MD5**, лицензии и **все 13 игровых `.gdc` побайтно совпадающие с APK**, включая `boot.gdc`. Внешний Actions ZIP отдельно прошёл SHA-256, CRC и проверку списка файлов; APK/IPA/build-info черновика совпали по размерам и хешам. Совместимость verifier с фактическими файлами 2.4 сохранена и проверена.
 
-Actions artifacts остаются `GeckoRush-unsigned-ipa` и `GeckoRush-ios-build-log`. Выпуск `v2.5.0` сначала создаётся как черновик; публикация требует независимого скачивания, сверки размеров/SHA и проверки нового launch branding. Нельзя подставлять размер, хеш, run/commit предыдущего выпуска в поля 2.5.
+Actions artifacts остаются `GeckoRush-unsigned-ipa` и `GeckoRush-ios-build-log`. Выпуск `v2.5.0` сначала был создан как черновик, затем опубликован после независимого скачивания, сверки размеров/SHA и проверки нового launch branding. Run/build source commit выше относятся к фактически собранному коду; Size/SHA — к независимо скачанной IPA.
 
-Локальная установка unsigned IPA выполняется через Sideloadly на своём Windows/Mac; Apple ID вводится только локально. Физический iPhone 2.5 не проверен. Новый Mac-прогон: `PENDING_V25_MAC_CI_RESULTS`. Сайт 2.5 пока не опубликован.
+Локальная установка unsigned IPA выполняется через Sideloadly на своём Windows/Mac; Apple ID вводится только локально. Физический iPhone 2.5 не проверен. Локальные тесты, Mac CI и независимая проверка IPA завершены. Страница скачивания предлагает ПК (Windows 2.2), Android 2.5 и iPhone 2.5; прямые GitHub-ссылки указаны выше.
 
 ## Архив: CI и IPA 2.4
 
