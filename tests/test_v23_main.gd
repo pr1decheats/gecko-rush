@@ -41,6 +41,8 @@ func _place_safe(metres: float, seconds: float) -> void:
 	game.jump_elapsed = -1.0
 	game.center_event = "off"
 	game.next_center_metres = 1.0e9
+	game.center_first_given = true
+	game.center_pending_metres = 0.0
 	# Use the actual safe-section feature to isolate speed integration; the
 	# certified lethal 3000m route remains covered by test_game.gd.
 	game.course.begin_safe_section(game.height_px - 1000.0, game.height_px + 10000.0)
@@ -99,20 +101,20 @@ func _test_selected_speed_profiles() -> void:
 		check(game.current_speed() == FOUR_KM[index] and game.current_speed() > ONE_KM[index], "selected world keeps accelerating beyond its former cap distance: " + id)
 		for height: float in [0.0, 1000.0, 9000.0]:
 			game.max_height_px = height * RushTuning.PIXELS_PER_METRE
-			var night_speed: float = game.speed_at(game.max_height_px) * 0.85
+			var night_speed: float = float(RushTuning.profile_for(id)["night_speed"])
 			for second: float in [40.0, 45.0, 59.99, 100.0, 119.99]:
 				game.run_time = second
-				check(is_equal_approx(game.current_speed(), night_speed), "night retains the selected height curve with a fifteen percent slowdown: " + id)
+				check(is_equal_approx(game.current_speed(), night_speed), "night retains the selected fixed slow pace: " + id)
 		_place_safe(1000.0, 46.0)
 		before = game.height_px
 		game._simulate_step(STEP)
-		check(absf(game.height_px - before - ONE_KM[index] * 0.85 * STEP) < 0.000001, "real night physics uses the selected world curve: " + id)
+		check(absf(game.height_px - before - float(RushTuning.profile_for(id)["night_speed"]) * STEP) < 0.000001, "real night physics uses the selected slow pace: " + id)
 		game.max_height_px = 4000.0 * RushTuning.PIXELS_PER_METRE
-		var previous: float = FOUR_KM[index] * 0.85
+		var previous: float = float(RushTuning.profile_for(id)["night_speed"])
 		for second: float in [60.0, 61.0, 62.0, 63.0, 64.0]:
 			game.run_time = second
 			var speed: float = game.current_speed()
-			check(speed >= previous and speed >= FOUR_KM[index] * 0.85 and speed <= FOUR_KM[index], "selected dawn stays continuous between local night and day speeds: " + id)
+			check(speed >= previous and speed >= float(RushTuning.profile_for(id)["night_speed"]) and speed <= FOUR_KM[index], "selected dawn stays continuous between local night and day speeds: " + id)
 			if second > 60.0:
 				check(speed > previous, "selected dawn accelerates on every transition sample: " + id)
 			previous = speed

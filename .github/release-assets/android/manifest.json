@@ -1,23 +1,23 @@
 {
-  "filename": "GeckoRush-2.4.apk",
-  "version": "2.4.0",
-  "size": 53517342,
-  "sha256": "1d1ee9a359c3082a5d1afda365271504c61cd9734d6caf92d41375717d5e456c",
+  "filename": "GeckoRush-2.5.apk",
+  "version": "2.5.0",
+  "size": 52919978,
+  "sha256": "27ff8128bf9d86dd92e7b52a599e3c154354870dadf215b70e562586efcdbb1d",
   "parts": [
     {
-      "file": "GeckoRush-2.4.01.bin",
+      "file": "GeckoRush-2.5.01.bin",
       "size": 18874368,
-      "sha256": "b30f9cae3bb0f365a82aaeabc743a349e8c61f7c4dfcb14cadb9209db6203bd5"
+      "sha256": "87242155639ba2825aeb9720aed0006ae59283125f2411f29bd70d62b702f06b"
     },
     {
-      "file": "GeckoRush-2.4.02.bin",
+      "file": "GeckoRush-2.5.02.bin",
       "size": 18874368,
-      "sha256": "a06ec208e9728611ef57a3b2b6107fd071a0357c118e9e417684c5e6e6714cbe"
+      "sha256": "7c73afffd1825604a3306c551cef42919412373419a50bab19ae8fed6c4a24a1"
     },
     {
-      "file": "GeckoRush-2.4.03.bin",
-      "size": 15768606,
-      "sha256": "2b226da9e5486bb119392e909cd8c2d63ecfb73d22b50c347a7581e980ebb819"
+      "file": "GeckoRush-2.5.03.bin",
+      "size": 15171242,
+      "sha256": "de5e4baf95330dd9710a4c867d5ef5f908d55548c7f2ba341127a4f75a182606"
     }
   ]
 }

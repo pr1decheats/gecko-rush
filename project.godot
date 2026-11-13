@@ -3,18 +3,18 @@ config_version=5
 
 [application]
 config/name="Gecko Rush"
-config/version="2.4.0"
+config/version="2.5.0"
 config/description="Один прыжок. Две стены. Бесконечная высота."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 run/max_fps=60
 config/icon="res://assets/icon.svg"
 boot_splash/bg_color=Color(0.003921569, 0.011764706, 0.05882353, 1)
 boot_splash/show_image=true
-boot_splash/image="res://assets/triada-games.png"
+boot_splash/image="res://assets/triada-games-launch.png"
 boot_splash/stretch_mode=1
 boot_splash/use_filter=true
-boot_splash/minimum_display_time=750
+boot_splash/minimum_display_time=100
 
 [autoload]
 L10n="*res://scripts/l10n.gd"

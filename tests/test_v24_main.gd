@@ -37,6 +37,8 @@ func _prepare(id: String, metres: float, seconds: float) -> void:
 	game.course.flies.clear()
 	game.course.safe_sections.clear()
 	game.next_center_metres = 1.0e12
+	game.center_first_given = true
+	game.center_pending_metres = 0.0
 	game.gecko.position = game.player_position()
 
 func _wall(height: float, half_height: float = 4.0) -> Dictionary:
@@ -84,6 +86,11 @@ func _test_daylight_chance() -> void:
 	var missed := 0
 	for seed: int in range(200):
 		game._reset_center_event()
+		game.center_first_given = true
+		game.next_center_metres = 3000.0
+		game.center_pending_metres = 0.0
+		game.height_px = 3000.0 * RushTuning.PIXELS_PER_METRE
+		game.max_height_px = game.height_px
 		game.course.safe_sections.clear()
 		game.run_seed = seed
 		game._begin_center_event()
@@ -96,7 +103,7 @@ func _test_daylight_chance() -> void:
 		else:
 			missed += 1
 			check(game.course.safe_sections.is_empty(), "missed daylight roll preserves the ordinary course")
-	check(accepted > 65 and accepted < 135 and missed > 65 and missed < 135 and accepted_seed >= 0, "daylight rolls retain approximately fifty-percent acceptance")
+	check(accepted > 65 and accepted < 135 and missed > 65 and missed < 135 and accepted_seed >= 0, "later daylight milestones retain approximately fifty-percent acceptance")
 	game.run_time = 28.19
 	game.center_next_allowed_time = 0.0
 	check(game._center_event_allowed(), "last complete daylight transfer still fits before dusk")
@@ -108,12 +115,13 @@ func _test_rejected_windows() -> void:
 		_prepare("ice", 4000.0, seconds)
 		game.run_seed = accepted_seed
 		game.next_center_metres = 1500.0
+		game.center_first_given = false
 		var fixture := _wall(game.height_px + 1500.0, 40.0)
 		game.course.hazards = [fixture]
 		game._tick_center_event(STEP)
 		check(game.center_event == "off" and not game.center_will_appear, "night/dawn/late-day milestone creates no preview at %s seconds" % seconds)
 		check(game.course.safe_sections.is_empty() and game.course.hazards.size() == 1 and game.course.hazards[0] == fixture, "rejected window does not clear existing hazards at %s seconds" % seconds)
-		check(game.next_center_metres == 4500.0 and game.center_next_allowed_time == 0.0, "rejected milestone consumes crossed distance without starting a cooldown")
+		check(game.next_center_metres > game.max_height_px / RushTuning.PIXELS_PER_METRE and game.center_pending_metres == 1500.0 and not game.center_first_given and game.center_next_allowed_time == 0.0, "rejected window preserves the guaranteed first milestone without starting cooldown")
 
 func _test_night_milestone_contact() -> void:
 	for seconds: float in [50.0, 100.0]:
@@ -121,6 +129,7 @@ func _test_night_milestone_contact() -> void:
 			_prepare("ice", metres, seconds)
 			game.run_seed = accepted_seed
 			game.next_center_metres = 1500.0
+			game.center_first_given = false
 			var start: Vector2 = game.player_position()
 			var advance: float = game.current_speed() * STEP
 			var fixture := _wall(game.height_px + advance * 0.5, 4.0)
@@ -128,7 +137,7 @@ func _test_night_milestone_contact() -> void:
 			game._simulate_step(STEP)
 			check(game.center_event == "off" and game.course.safe_sections.is_empty(), "actual night physics grants no central respite at %sm / %ss" % [metres, seconds])
 			check(game.state == game.State.DYING and game.death_kind == "ice_teeth", "night milestone leaves its crossed wall hazard lethal")
-			check(game.next_center_metres > game.max_height_px / RushTuning.PIXELS_PER_METRE and game.center_next_allowed_time == 0.0, "one night step consumes every crossed central milestone")
+			check(game.next_center_metres > game.max_height_px / RushTuning.PIXELS_PER_METRE and game.center_pending_metres == 1500.0 and not game.center_first_given and game.center_next_allowed_time == 0.0, "night contact leaves the guaranteed first event pending rather than consuming it")
 			check(game.player_position().y < start.y and p.data.runs == 1, "real night contact advances and settles one run")
 
 func _test_cooldown_and_long_transfer() -> void:
@@ -136,6 +145,7 @@ func _test_cooldown_and_long_transfer() -> void:
 	game.run_seed = accepted_seed
 	# Reuse the known accepted event number while starting at a much later height.
 	game.next_center_metres = 1500.0
+	game.center_first_given = false
 	game._begin_center_event()
 	check(game.center_event == "preview" and game.center_will_appear, "valid daylight still starts a high-distance central transfer")
 	check(game.next_center_metres == 51000.0 and game.center_next_allowed_time == 70.0, "high-distance attempt consumes all earlier milestones and starts cooldown")
@@ -146,7 +156,7 @@ func _test_cooldown_and_long_transfer() -> void:
 	check(game.max_height_px / RushTuning.PIXELS_PER_METRE > 65000.0, "fast central ride actually crosses several further 1500m milestones")
 	check(protected_end > game.height_px + game.current_speed() * 0.4, "fast return retains a speed-scaled reaction margin")
 	game._tick_center_event(STEP)
-	check(game.center_event == "off" and game.next_center_metres > game.max_height_px / RushTuning.PIXELS_PER_METRE, "crossed ride milestones cannot chain another invulnerable transfer")
+	check(game.center_event == "off" and game.center_pending_metres >= 1500.0 and game.center_next_allowed_time == 70.0, "crossed ride milestones wait through cooldown instead of chaining invulnerability")
 	var safe_before := _canonical(game.course.safe_sections)
 	game._pause_run()
 	var saved: Dictionary = p.load_resume()
@@ -177,7 +187,7 @@ func _test_night_restore() -> void:
 	p.load_game()
 	game._show_menu()
 	game._restore_run()
-	check(game.state == game.State.PAUSED and game.run_time == 50.0 and is_equal_approx(game.current_speed(), 6040.0 * 0.85) and is_equal_approx(game.current_speed(), speed_before), "disk checkpoint retains 4km night pace and phase")
+	check(game.state == game.State.PAUSED and game.run_time == 50.0 and is_equal_approx(game.current_speed(), float(RushTuning.profile_for("ice")["night_speed"])) and is_equal_approx(game.current_speed(), speed_before), "disk checkpoint retains 4km night pace and phase")
 	check(game.center_event == "off" and game.center_next_allowed_time == 91.0 and game.course.safe_sections.is_empty(), "night restore retains cooldown without manufacturing protected terrain")
 	game._continue_run()
 	game._simulate_step(STEP)

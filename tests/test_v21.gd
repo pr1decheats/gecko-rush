@@ -32,9 +32,9 @@ func _run() -> void:
 	check(RushTuning.PIXELS_PER_METRE == 64.0, "metre counter advances at half the old rate")
 	for height: float in [0.0, 64000.0, 256000.0]:
 		for second: float in [40.0, 45.0, 50.0, 59.99, 100.0, 119.99]:
-			check(is_equal_approx(RushTuning.run_speed_at(height, second), RushTuning.speed_at(height) * 0.85), "Easy night retains 85 percent of the height-dependent day pace")
+			check(is_equal_approx(RushTuning.run_speed_at(height, second), float(RushTuning.profile_for("jungle")["night_speed"])), "Easy night retains its selected slow pace independent of height")
 	check(not RushTuning.is_night(39.99) and RushTuning.is_night(40.0) and RushTuning.is_night(59.99) and not RushTuning.is_night(60.0), "night lasts exactly twenty seconds")
-	check(absf(RushTuning.run_speed_at(64000, 39.999) - 1662.0 * 0.85) < 0.01, "dusk slowdown reaches the height-dependent night pace continuously")
+	check(absf(RushTuning.run_speed_at(64000, 39.999) - float(RushTuning.profile_for("jungle")["night_speed"])) < 0.01, "dusk slowdown reaches the fixed slow night pace continuously")
 	var dawn_speeds: Array[float] = []
 	for second: float in [60, 61, 62, 63, 64]:
 		dawn_speeds.append(RushTuning.run_speed_at(64000, second))
@@ -57,6 +57,10 @@ func _run() -> void:
 	var accepted := 0
 	for seed_index in range(200):
 		game._reset_center_event()
+		game.center_first_given = true
+		game.next_center_metres = 3000.0
+		game.height_px = 3000.0 * RushTuning.PIXELS_PER_METRE
+		game.max_height_px = game.height_px
 		game.run_seed = seed_index
 		game._begin_center_event()
 		if game.center_will_appear:
@@ -64,7 +68,7 @@ func _run() -> void:
 			accepted_seed = seed_index
 		else:
 			missed_seed = seed_index
-	check(accepted > 65 and accepted < 135 and accepted_seed >= 0 and missed_seed >= 0, "independent event chance is approximately fifty percent")
+	check(accepted > 65 and accepted < 135 and accepted_seed >= 0 and missed_seed >= 0, "later independent event chance is approximately fifty percent")
 	_prepare_event(accepted_seed)
 	check(game.center_event == "preview" and game.center_will_appear and game.next_center_metres == 3000.0, "1500m milestone previews exactly one accepted event")
 	check(not game.course.safe_sections.is_empty(), "accepted preview clears the approach before transfer")
@@ -97,7 +101,7 @@ func _run() -> void:
 	game._process(0.0)
 	check(game.center_event == "off" and game.environment.side_walls_visibility == 1, "return restores both side walls")
 	check(game.player_position().x == game.LEFT_X and game.side == -1, "return reaches the correct original side")
-	_prepare_event(missed_seed)
+	_prepare_event(missed_seed, 2)
 	check(not game.center_will_appear and game.course.safe_sections.is_empty(), "failed roll preserves the ordinary course")
 	game._tick_center_event(RushTuning.CENTER_PREVIEW_SECONDS)
 	check(game.center_event == "miss", "failed ghost fades away")
@@ -111,12 +115,14 @@ func _run() -> void:
 	print("V21: %d checks, %d failures" % [checks, failures])
 	quit(1 if failures else 0)
 
-func _prepare_event(seed_index: int) -> void:
+func _prepare_event(seed_index: int, event_number: int = 1) -> void:
 	game._start_run(true)
 	game.run_seed = seed_index
 	game.state = game.State.RUNNING
 	game.run_time = 70.0
-	game.height_px = 1500.0 * RushTuning.PIXELS_PER_METRE
+	game.center_first_given = event_number > 1
+	game.next_center_metres = float(event_number) * RushTuning.CENTER_EVERY_METRES
+	game.height_px = float(event_number) * RushTuning.CENTER_EVERY_METRES * RushTuning.PIXELS_PER_METRE
 	game.max_height_px = game.height_px
 	game.course.setup(seed_index, "jungle")
 	game.course.ensure_ahead(game.height_px, game.run_time)

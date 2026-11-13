@@ -17,10 +17,10 @@ func _run() -> void:
 	_check(presets.load(project_root.path_join("export_presets.cfg")) == OK, "Export configuration loads")
 	_check(project.get_value("application", "config/icon") == "res://assets/icon.svg", "Gecko app icon is retained")
 	_check(project.get_value("application", "boot_splash/show_image") == true, "Custom engine splash is visible")
-	_check(project.get_value("application", "boot_splash/image") == "res://assets/triada-games.png", "Engine uses supplied Triada logo")
+	_check(project.get_value("application", "boot_splash/image") == "res://assets/triada-games-launch.png", "Engine uses supplied Triada logo")
 	_check(project.get_value("application", "boot_splash/stretch_mode") == 1, "Engine keeps image aspect ratio")
 	_check(project.get_value("application", "boot_splash/use_filter") == true, "Detailed logo uses filtering")
-	_check(int(project.get_value("application", "boot_splash/minimum_display_time")) == 750, "Brand is briefly visible without a long delay")
+	_check(int(project.get_value("application", "boot_splash/minimum_display_time")) == 100, "Brand is briefly visible without a long delay")
 	var background: Color = project.get_value("application", "boot_splash/bg_color")
 	_check(background.is_equal_approx(Color(1.0/255.0, 3.0/255.0, 15.0/255.0, 1)), "Letterbox background matches supplied logo")
 	var path := project_root.path_join("assets/triada-games.png")
@@ -39,7 +39,7 @@ func _run() -> void:
 	_check(not section.is_empty(), "iOS export exists")
 	_check(presets.get_value(section, "storyboard/image_scale_mode") == 2, "Native iOS launch screen uses scaleAspectFit")
 	for density in ["2x", "3x"]:
-		_check(presets.get_value(section, "storyboard/custom_image@" + density) == "res://assets/triada-games.png", "Native iOS " + density + " uses supplied logo")
+		_check(presets.get_value(section, "storyboard/custom_image@" + density) == "res://assets/triada-games-launch.png", "Native iOS " + density + " uses supplied logo")
 	_check(presets.get_value(section, "storyboard/use_custom_bg_color") == true, "iOS custom background enabled")
 	_check(presets.get_value(section, "storyboard/custom_bg_color").is_equal_approx(background), "Engine and native iOS background agree")
 	if DisplayServer.get_name() != "headless" and args.size() > 1:
@@ -51,7 +51,7 @@ func _run() -> void:
 		var logo := TextureRect.new()
 		logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		logo.texture = ImageTexture.create_from_image(image)
+		logo.texture = ImageTexture.create_from_image(Image.load_from_file(project_root.path_join("assets/triada-games-launch.png")))
 		logo.size = Vector2(405, 720)
 		get_root().add_child(logo)
 		_check(logo.size == Vector2(405, 720), "Logo preview uses the actual portrait frame")
@@ -64,7 +64,7 @@ func _run() -> void:
 		logo.queue_free()
 		backdrop.queue_free()
 		await process_frame
-	print("V24 branding: %d checks, %d failures" % [checks, failures])
+	print("Branding regression: %d checks, %d failures" % [checks, failures])
 	quit(0 if failures == 0 else 1)
 
 func _check(value: bool, message: String) -> void:

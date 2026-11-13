@@ -23,10 +23,10 @@ jobs:
       contents: write
     env:
       GODOT_VERSION: 4.6.3
-      RELEASE_VERSION: "2.4.0"
-      RELEASE_BUILD: "6"
-      RELEASE_TAG: v2.4.0
-      RELEASE_BASENAME: GeckoRush-2.4
+      RELEASE_VERSION: "2.5.0"
+      RELEASE_BUILD: "7"
+      RELEASE_TAG: v2.5.0
+      RELEASE_BASENAME: GeckoRush-2.5
     defaults:
       run:
         shell: bash
@@ -186,6 +186,7 @@ jobs:
           "$GODOT_BIN" --headless --path "$GECKO_IOS_STAGING_DIR" \
             --script "$GITHUB_WORKSPACE/.github/check_ios_branding.gd" -- \
             "$GECKO_IOS_STAGING_DIR/assets/triada-games.png" \
+            "$GECKO_IOS_STAGING_DIR/assets/triada-games-launch.png" \
             "$IOS_EXPORT_ROOT/GeckoRush/Images.xcassets/SplashImage.imageset/splash@2x.png" \
             "$IOS_EXPORT_ROOT/GeckoRush/Images.xcassets/SplashImage.imageset/splash@3x.png" \
             2>&1 | tee -a "$IOS_EXPORT_ROOT/branding-verification.log"
@@ -304,7 +305,7 @@ jobs:
                   f"Android APK: {apk_name}\n"
                   f"Android SHA256: {os.environ['ANDROID_APK_SHA256']}\n"
                   "Frozen signed Android release; CI did not rebuild or re-sign it.\n"
-                  "Portable package verification: PASS; all 12 compiled game scripts match byte for byte.\n"
+                  "Portable package verification: PASS; all 13 compiled game scripts match byte for byte.\n"
               )
           (output / "README-Sideloadly.txt").write_text(
               "Gecko Rush mobile installation\n\n"

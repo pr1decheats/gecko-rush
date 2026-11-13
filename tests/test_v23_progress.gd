@@ -42,7 +42,7 @@ func _run() -> void:
 		check(profile["xp_multiplier"] > previous_xp, id + " rewards difficulty with more XP")
 		check(TUNING.speed_at(-100.0, id) == profile["start_speed"], id + " clamps negative distance")
 		check(TUNING.speed_at(1.0e12, id) > late_speed, id + " has no final distance or speed cap")
-		check(is_equal_approx(TUNING.run_speed_at(100000.0, 45.0, id), TUNING.speed_at(100000.0, id) * 0.85), id + " uses its own height curve at night")
+		check(is_equal_approx(TUNING.run_speed_at(100000.0, 45.0, id), float(profile["night_speed"])), id + " uses its own slow fixed pace at night")
 		var last_speed: float = profile["start_speed"]
 		var increasing := true
 		for metres: int in range(0, 3501, 25):

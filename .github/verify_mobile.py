@@ -5,8 +5,8 @@ Python standard library only; runs on Linux and macOS without Apple tools.
 Checks the actual ZIP, device executable, metadata, PCK checksums and all compiled
 scripts. Does not run, sign, build or publish either application.
 
-    python3 .github/verify_mobile.py --ipa GeckoRush-2.3-unsigned.ipa \
-        --apk GeckoRush-2.3.apk --apk-sha256 <frozen SHA-256>
+    python3 .github/verify_mobile.py --ipa GeckoRush-2.5-unsigned.ipa \
+        --apk GeckoRush-2.5.apk --apk-sha256 <frozen SHA-256>
 """
 
 import argparse
@@ -302,7 +302,14 @@ def compare_android(entries, apk_path, expected_sha256, version):
     digest = sha256_file(apk_path)
     require(digest == expected_sha256, "Android APK SHA-256 differs from the frozen release")
     scripts = {name for name in entries if name.endswith(".gdc")}
-    require(len(scripts) == 12, f"Expected 12 compiled scripts, found {len(scripts)}")
+    expected_scripts = {f"scripts/{name}.gdc" for name in (
+        "android_refresh", "audio", "center_wall", "course", "effects", "environment",
+        "gecko", "l10n", "main", "progress", "tuning", "ui")}
+    if tuple(int(part) for part in version.split(".")) >= (2, 5, 0):
+        expected_scripts.add("scripts/boot.gdc")
+    require(scripts == expected_scripts,
+            f"Compiled script set differs: missing={sorted(expected_scripts - scripts)}, "
+            f"unexpected={sorted(scripts - expected_scripts)}")
     with zipfile.ZipFile(apk_path) as apk:
         names = apk.namelist()
         normalized = set()
@@ -329,7 +336,7 @@ def compare_android(entries, apk_path, expected_sha256, version):
             "compiled_scripts_identical": len(scripts)}
 
 
-def verify(ipa_path, apk_path, apk_sha256, version="2.4.0", build="6"):
+def verify(ipa_path, apk_path, apk_sha256, version="2.5.0", build="7"):
     require(ipa_path.is_file(), f"Actual IPA not found: {ipa_path}")
     with zipfile.ZipFile(ipa_path) as archive:
         members, root = inspect_archive(archive)
@@ -378,8 +385,8 @@ def main():
     parser.add_argument("--ipa", type=Path, required=True)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--apk-sha256", required=True, help="SHA-256 of the frozen signed APK")
-    parser.add_argument("--version", default="2.4.0")
-    parser.add_argument("--build", default="6")
+    parser.add_argument("--version", default="2.5.0")
+    parser.add_argument("--build", default="7")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-fA-F]{64}", args.apk_sha256):
         parser.error("--apk-sha256 must contain exactly 64 hexadecimal characters")

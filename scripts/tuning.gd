@@ -11,8 +11,7 @@ const PIXELS_PER_METRE := 64.0
 # Deprecated compatibility values. Runtime pace is never clamped to these.
 const MAX_SPEED := 2700.0
 const START_SPEED := 800.0
-const NIGHT_SPEED := START_SPEED * 0.85
-const NIGHT_MULTIPLIER := 0.85
+const NIGHT_SPEED := 680.0
 const CENTER_WALL_WIDTH := 56.0
 const CENTER_WALL_LEFT := (1080.0 - CENTER_WALL_WIDTH) * 0.5
 const CENTER_WALL_RIGHT := CENTER_WALL_LEFT + CENTER_WALL_WIDTH
@@ -31,12 +30,12 @@ const CENTER_EXIT_SECONDS := 0.5
 # All three coefficients increase with the selected world, so difficulty
 # ordering holds at every height. No end distance or maximum speed exists.
 const WORLD_PROFILES := {
-	"jungle": {"start_speed": 800.0, "growth_per_km": 850.0, "endless_quadratic": 12.0, "night_multiplier": NIGHT_MULTIPLIER, "spacing_scale": 1.22, "motion_scale": 0.72, "xp_multiplier": 0.55},
-	"canyon": {"start_speed": 900.0, "growth_per_km": 1000.0, "endless_quadratic": 16.0, "night_multiplier": NIGHT_MULTIPLIER, "spacing_scale": 1.16, "motion_scale": 0.86, "xp_multiplier": 0.75},
-	"ice": {"start_speed": 1000.0, "growth_per_km": 1180.0, "endless_quadratic": 20.0, "night_multiplier": NIGHT_MULTIPLIER, "spacing_scale": 1.10, "motion_scale": 1.0, "xp_multiplier": 1.0},
-	"crystal": {"start_speed": 1120.0, "growth_per_km": 1350.0, "endless_quadratic": 24.0, "night_multiplier": NIGHT_MULTIPLIER, "spacing_scale": 1.06, "motion_scale": 1.10, "xp_multiplier": 1.25},
-	"volcano": {"start_speed": 1240.0, "growth_per_km": 1540.0, "endless_quadratic": 29.0, "night_multiplier": NIGHT_MULTIPLIER, "spacing_scale": 1.03, "motion_scale": 1.20, "xp_multiplier": 1.55},
-	"sky": {"start_speed": 1380.0, "growth_per_km": 1760.0, "endless_quadratic": 35.0, "night_multiplier": NIGHT_MULTIPLIER, "spacing_scale": 1.0, "motion_scale": 1.30, "xp_multiplier": 1.85}
+	"jungle": {"start_speed": 800.0, "growth_per_km": 850.0, "endless_quadratic": 12.0, "night_speed": 680.0, "spacing_scale": 1.22, "motion_scale": 0.72, "xp_multiplier": 0.55},
+	"canyon": {"start_speed": 900.0, "growth_per_km": 1000.0, "endless_quadratic": 16.0, "night_speed": 760.0, "spacing_scale": 1.16, "motion_scale": 0.86, "xp_multiplier": 0.75},
+	"ice": {"start_speed": 1000.0, "growth_per_km": 1180.0, "endless_quadratic": 20.0, "night_speed": 840.0, "spacing_scale": 1.10, "motion_scale": 1.0, "xp_multiplier": 1.0},
+	"crystal": {"start_speed": 1120.0, "growth_per_km": 1350.0, "endless_quadratic": 24.0, "night_speed": 920.0, "spacing_scale": 1.06, "motion_scale": 1.10, "xp_multiplier": 1.25},
+	"volcano": {"start_speed": 1240.0, "growth_per_km": 1540.0, "endless_quadratic": 29.0, "night_speed": 1000.0, "spacing_scale": 1.03, "motion_scale": 1.20, "xp_multiplier": 1.55},
+	"sky": {"start_speed": 1380.0, "growth_per_km": 1760.0, "endless_quadratic": 35.0, "night_speed": 1080.0, "spacing_scale": 1.0, "motion_scale": 1.30, "xp_multiplier": 1.85}
 }
 
 static func profile_for(world_id: String) -> Dictionary:
@@ -50,9 +49,9 @@ static func speed_at(height_px: float, world_id: String = "jungle") -> float:
 	return float(profile["start_speed"]) + float(profile["growth_per_km"]) * kilometres + float(profile["endless_quadratic"]) * kilometres * kilometres
 
 static func min_speed_at(height_px: float, world_id: String = "jungle") -> float:
-	# A height-local bound across every day/night phase, not a fixed night pace.
+	# Night deliberately offers a slow twenty-second respite at every height.
 	var profile: Dictionary = WORLD_PROFILES.get(world_id, WORLD_PROFILES["jungle"])
-	return speed_at(height_px, world_id) * float(profile["night_multiplier"])
+	return float(profile["night_speed"])
 
 static func max_speed_at(height_px: float, world_id: String = "jungle") -> float:
 	# Course certification uses this monotone local bound at future heights.
@@ -73,4 +72,4 @@ static func cycle_remaining(seconds: float) -> float:
 
 static func run_speed_at(height_px: float, seconds: float, world_id: String = "jungle") -> float:
 	var profile: Dictionary = WORLD_PROFILES.get(world_id, WORLD_PROFILES["jungle"])
-	return speed_at(height_px, world_id) * lerpf(1.0, float(profile["night_multiplier"]), night_amount(seconds))
+	return lerpf(speed_at(height_px, world_id), float(profile["night_speed"]), night_amount(seconds))

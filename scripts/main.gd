@@ -54,6 +54,9 @@ var center_origin_side: int = -1
 var center_entry_x: float = LEFT_X
 var center_lane_x: float = CENTER_WALL_LEFT - 26.0
 var center_next_allowed_time: float = 0.0
+var center_pending_metres: float = 0.0
+var center_first_given: bool = false
+var center_active_metres: float = 0.0
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
@@ -231,6 +234,9 @@ func _reset_center_event() -> void:
 	center_entry_x = LEFT_X
 	center_lane_x = CENTER_WALL_LEFT - 26.0
 	center_next_allowed_time = 0.0
+	center_pending_metres = 0.0
+	center_first_given = false
+	center_active_metres = 0.0
 	center_wall.reset_visual()
 	environment.side_walls_visibility = 1.0
 
@@ -244,6 +250,10 @@ func _center_event_allowed() -> bool:
 	return phase + duration + 0.25 <= RushTuning.DAY_SECONDS - RushTuning.CYCLE_FADE_SECONDS
 
 func _cancel_center_for_night() -> void:
+	if center_active_metres == RushTuning.CENTER_EVERY_METRES and center_event in ["preview", "enter"]:
+		center_pending_metres = RushTuning.CENTER_EVERY_METRES
+		center_first_given = false
+		center_next_allowed_time = 0.0
 	if center_event in ["enter", "ride", "exit"]:
 		side = center_origin_side
 		from_side = side
@@ -254,22 +264,36 @@ func _cancel_center_for_night() -> void:
 	center_event = "off"
 	center_elapsed = 0.0
 	center_will_appear = false
+	center_active_metres = 0.0
 	center_wall.reset_visual()
 	environment.side_walls_visibility = 1.0
 	gecko.position = player_position()
 
-func _begin_center_event() -> void:
-	var event_number := maxi(1, roundi(next_center_metres / RushTuning.CENTER_EVERY_METRES))
-	# Fast climbs may pass several milestones during one ride. Consume those
-	# milestones together, rather than chaining invulnerable rides afterward.
+func _queue_center_milestone() -> void:
+	# Keep one pending milestone while night/cooldown prevents an attempt.
+	# Coalescing later crossed heights cannot erase the guaranteed first wall.
+	if center_pending_metres <= 0.0:
+		center_pending_metres = RushTuning.CENTER_EVERY_METRES if not center_first_given else next_center_metres
 	next_center_metres = maxf(next_center_metres + RushTuning.CENTER_EVERY_METRES, (floorf(max_height_px / PIXELS_PER_METRE / RushTuning.CENTER_EVERY_METRES) + 1.0) * RushTuning.CENTER_EVERY_METRES)
+
+func _begin_center_event() -> void:
+	if center_event != "off":
+		return
+	if center_pending_metres <= 0.0:
+		_queue_center_milestone()
+	# Refusing night, dawn, late daylight or cooldown preserves the milestone.
 	if not _center_event_allowed():
 		center_will_appear = false
 		return
+	center_active_metres = center_pending_metres
+	center_pending_metres = 0.0
+	var event_number := maxi(1, roundi(center_active_metres / RushTuning.CENTER_EVERY_METRES))
 	center_next_allowed_time = run_time + RushTuning.CYCLE_SECONDS
 	var event_rng := RandomNumberGenerator.new()
 	event_rng.seed = run_seed + event_number * 104729
-	center_will_appear = event_rng.randf() < 0.5
+	center_will_appear = event_number == 1 or event_rng.randf() < 0.5
+	if event_number == 1:
+		center_first_given = true
 	center_event = "preview"
 	center_elapsed = 0.0
 	if center_will_appear:
@@ -288,7 +312,12 @@ func _tick_center_event(delta: float) -> void:
 		_cancel_center_for_night()
 		return
 	if center_event == "off":
-		if max_height_px / PIXELS_PER_METRE >= next_center_metres:
+		var metres := max_height_px / PIXELS_PER_METRE
+		if metres >= next_center_metres:
+			_queue_center_milestone()
+		elif not center_first_given and center_pending_metres <= 0.0 and metres >= RushTuning.CENTER_EVERY_METRES:
+			center_pending_metres = RushTuning.CENTER_EVERY_METRES
+		if center_pending_metres > 0.0:
 			_begin_center_event()
 		return
 	center_elapsed += delta
@@ -338,10 +367,12 @@ func _tick_center_event(delta: float) -> void:
 				gecko.land()
 				center_event = "off"
 				center_elapsed = 0.0
+				center_active_metres = 0.0
 		"miss":
 			if center_elapsed >= 0.5:
 				center_event = "off"
 				center_elapsed = 0.0
+				center_active_metres = 0.0
 
 func _update_center_visual(night: float) -> void:
 	center_wall.phase = center_event
@@ -584,7 +615,8 @@ func _store_resume() -> void:
 		"camera_height": camera_height, "record_announced": record_announced,
 		"center": {"next_metres": next_center_metres, "event": center_event, "elapsed": center_elapsed,
 			"will_appear": center_will_appear, "origin_side": center_origin_side, "entry_x": center_entry_x, "lane_x": center_lane_x,
-			"next_allowed_time": center_next_allowed_time},
+			"next_allowed_time": center_next_allowed_time, "pending_metres": center_pending_metres,
+			"first_given": center_first_given, "active_metres": center_active_metres},
 		"course": course.snapshot()
 	})
 
@@ -618,6 +650,21 @@ func _restore_run() -> void:
 	center_elapsed = clampf(float(saved_center.get("elapsed", 0.0)), 0.0, RushTuning.CENTER_RIDE_SECONDS)
 	center_will_appear = bool(saved_center.get("will_appear", false))
 	center_next_allowed_time = maxf(0.0, float(saved_center.get("next_allowed_time", 0.0)))
+	center_pending_metres = maxf(0.0, float(saved_center.get("pending_metres", 0.0)))
+	center_active_metres = maxf(0.0, float(saved_center.get("active_metres", 0.0)))
+	if saved_center.has("first_given"):
+		center_first_given = bool(saved_center["first_given"])
+	else:
+		# Existing schema-6 checkpoints do not record whether the first roll
+		# was skipped. Preserve accepted transfers already in progress; repair
+		# ambiguous off/missed saves with one guaranteed daytime opportunity.
+		var accepted_active := center_will_appear and center_event in ["preview", "enter", "ride", "exit"]
+		center_first_given = accepted_active
+		if accepted_active:
+			center_active_metres = RushTuning.CENTER_EVERY_METRES
+		elif max_height_px / PIXELS_PER_METRE >= RushTuning.CENTER_EVERY_METRES:
+			center_pending_metres = RushTuning.CENTER_EVERY_METRES
+			center_next_allowed_time = 0.0
 	center_origin_side = -1 if int(saved_center.get("origin_side", -1)) < 0 else 1
 	center_entry_x = clampf(float(saved_center.get("entry_x", LEFT_X)), LEFT_X, RIGHT_X)
 	center_lane_x = CENTER_WALL_LEFT - 26.0 if center_origin_side == -1 else CENTER_WALL_RIGHT + 26.0

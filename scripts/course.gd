@@ -17,6 +17,8 @@ const LOOKAHEAD := 5000.0
 const KEEP_BEHIND := 1900.0
 const VALIDATION_RADIUS := 30.0
 const SPIKE_REACH := 84.0
+const ICICLE_RADIUS := 21.0
+const ICICLE_HALF_LENGTH := 34.0
 const STREAM_AHEAD_SECONDS := 3.0
 const KEEP_BEHIND_SECONDS := 0.8
 const PHYSICS_STEP := 1.0 / 120.0
@@ -450,8 +452,8 @@ func _central_hazard(kind: String, start: float) -> Dictionary:
 			item["frequency"] = 1.2
 		"icicle":
 			item["shape"] = "capsule"
-			item["r"] = 14.0
-			item["half_length"] = 33.0
+			item["r"] = ICICLE_RADIUS
+			item["half_length"] = ICICLE_HALF_LENGTH
 			item["angle"] = PI * 0.5
 			item["motion_y"] = 32.0
 			item["frequency"] = 2.5
@@ -1051,7 +1053,9 @@ func _capsule_color(kind: String) -> Color:
 static func _silhouette_points(kind: String, radius: float, half_length: float = 0.0) -> PackedVector2Array:
 	var tip := half_length + radius
 	if kind == "icicle":
-		return PackedVector2Array([Vector2(-tip, -radius * 0.72), Vector2(-tip, radius * 0.72), Vector2(half_length * 0.4, radius * 0.55), Vector2(tip, 0), Vector2(half_length * 0.4, -radius * 0.55)])
+		# Normalised corners keep the cached drawing and exact hit polygon
+		# aligned for both current icicles and older saved dimensions.
+		return PackedVector2Array([Vector2(-tip, -radius * 0.72), Vector2(-tip, radius * 0.72), Vector2(tip * 0.28, radius * 0.55), Vector2(tip, 0), Vector2(tip * 0.28, -radius * 0.55)])
 	if kind == "fire_jet":
 		return PackedVector2Array([Vector2(-tip, 0), Vector2(-half_length * 0.5, -radius * 0.8), Vector2(-half_length * 0.1, -radius * 0.5), Vector2(half_length * 0.45, -radius), Vector2(tip, -radius * 0.3), Vector2(tip, radius * 0.3), Vector2(half_length * 0.45, radius), Vector2(-half_length * 0.1, radius * 0.6), Vector2(-half_length * 0.5, radius * 0.8)])
 	if kind == "wind_blade":
@@ -1087,7 +1091,7 @@ func _long_polygon_texture(kind: String) -> Texture2D:
 	var image := _new_image(128, 32)
 	var ratio := 3.0
 	match kind:
-		"icicle": ratio = 33.0 / 14.0
+		"icicle": ratio = ICICLE_HALF_LENGTH / ICICLE_RADIUS
 		"vine": ratio = 40.0 / 13.0
 		"frost": ratio = 38.0 / 13.0
 		"fire_jet": ratio = 42.0 / 13.0
@@ -1105,10 +1109,13 @@ func _long_polygon_texture(kind: String) -> Texture2D:
 				if Geometry2D.get_closest_point_to_segment(point, points[index], points[(index + 1) % points.size()]).distance_squared_to(point) < 0.012:
 					edge = true
 					break
-			if edge: color = base.darkened(0.6)
+			if edge: color = Color("24546e") if kind == "icicle" else base.darkened(0.6)
 			elif kind == "icicle":
-				if absf(point.y - 0.05) < 0.08: color = Color("f0ffff")
-				elif point.y < 0: color = Color("73bddb")
+				# A bright inner face and a dark contour stay inside the same
+				# lethal silhouette; no glow makes empty space look dangerous.
+				if point.y < -0.30: color = Color("f1ffff")
+				elif absf(point.y - 0.05) < 0.16: color = Color("d9fbff")
+				else: color = Color("80cce7")
 			elif kind == "vine":
 				if absf(point.y) < 0.2: color = Color("517536")
 				elif absf(point.y) > 0.5: color = Color("b6aa67")

@@ -1,6 +1,6 @@
 extends SceneTree
 ## Run: godot --headless --path . --script tests/test_v24_tuning.gd
-## Pace keeps growing at every height; night scales the same height curve.
+## Day pace grows forever; night restores a deliberately slow fixed world pace.
 
 const Tuning = preload("res://scripts/tuning.gd")
 const WORLDS := ["jungle", "canyon", "ice", "crystal", "volcano", "sky"]
@@ -69,14 +69,14 @@ func _test_night_and_bounds() -> void:
 		for metres: float in METRES:
 			var height := metres * 64.0
 			var day: float = Tuning.speed_at(height, world)
-			check(near(Tuning.min_speed_at(height, world), day * 0.85), "Local minimum is 85 percent of current altitude pace: " + world)
+			check(near(Tuning.min_speed_at(height, world), float(Tuning.profile_for(world)["night_speed"])), "Local minimum is the selected slow night pace: " + world)
 			check(Tuning.max_speed_at(height, world) == day, "Local maximum is the current altitude day pace: " + world)
 			for phase: float in PHASES:
 				var current: float = Tuning.run_speed_at(height, phase, world)
-				check(current >= day * 0.85 - 0.000001 and current <= day + 0.000001, "Phase stays within selected-world local bounds: " + world)
+				check(current >= Tuning.min_speed_at(height, world) - 0.000001 and current <= day + 0.000001, "Phase stays within selected-world local bounds: " + world)
 			for phase: float in [40.0, 45.0, 59.999, 100.0, 119.999]:
-				check(near(Tuning.run_speed_at(height, phase, world), day * 0.85), "Night scales with altitude rather than resetting speed: " + world)
-		check(Tuning.run_speed_at(12000.0 * 64.0, 45.0, world) > Tuning.run_speed_at(4000.0 * 64.0, 45.0, world), "Night also accelerates after 4 km: " + world)
+				check(near(Tuning.run_speed_at(height, phase, world), float(Tuning.profile_for(world)["night_speed"])), "Full night keeps the selected slow pace at every height: " + world)
+		check(Tuning.run_speed_at(12000.0 * 64.0, 45.0, world) == Tuning.run_speed_at(4000.0 * 64.0, 45.0, world), "Night remains visibly slow after 12 km: " + world)
 
 func _test_joins() -> void:
 	for world: String in WORLDS:
@@ -99,11 +99,11 @@ func _test_night_trajectory() -> void:
 		for step in range(360):
 			clock += 1.0 / 120.0
 			var current: float = Tuning.run_speed_at(height, clock, world)
-			check(current >= previous, "Real 120 Hz night travel keeps gaining altitude pace: " + world)
+			check(near(current, opening), "Real 120 Hz night travel retains its slow pace: " + world)
 			height += current / 120.0
 			previous = current
-		check(height > 4000.0 * 64.0 + opening * 3.0, "Height keeps growing throughout night: " + world)
-		check(previous > opening, "Real night movement never becomes a fixed-speed plateau: " + world)
+		check(near(height, 4000.0 * 64.0 + opening * 3.0), "Real night travel advances by its fixed pace for three seconds: " + world)
+		check(near(previous, opening), "Real night movement avoids height-driven acceleration until dawn: " + world)
 
 func _test_public_api() -> void:
 	var mutable: Dictionary = Tuning.profile_for("jungle")
@@ -116,5 +116,5 @@ func _test_public_api() -> void:
 	check(Tuning.speed_at(1234.0, "missing") == Tuning.speed_at(1234.0, "jungle"), "Invalid world falls back safely")
 	for world: String in WORLDS:
 		var profile: Dictionary = Tuning.profile_for(world)
-		check(not profile.has("max_speed") and not profile.has("cap_metres") and not profile.has("night_speed"), "Runtime profiles expose growth, not obsolete fixed pace limits: " + world)
+		check(not profile.has("max_speed") and not profile.has("cap_metres") and profile.has("night_speed"), "Runtime profiles expose endless day growth and the deliberate night respite: " + world)
 		check(float(profile["growth_per_km"]) > 0.0 and float(profile["endless_quadratic"]) > 0.0, "Every profile has positive endless growth: " + world)

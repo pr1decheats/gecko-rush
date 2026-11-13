@@ -84,8 +84,8 @@ func _test_world_profiles() -> void:
 			var day := RushTuning.speed_at(height, world)
 			var night := RushTuning.run_speed_at(height, 45.0, world)
 			check(day > previous_day, "Day speed continues increasing at every altitude: " + world)
-			check(night > previous_night, "Night speed continues increasing at every altitude: " + world)
-			check(is_equal_approx(night, day * float(profile["night_multiplier"])), "Night scales the selected world's current-height pace: " + world)
+			check(night == float(profile["night_speed"]), "Night keeps the selected slow pace at every altitude: " + world)
+			check(night < day, "Night remains slower than the selected daytime curve: " + world)
 			previous_day = day
 			previous_night = night
 		previous_speed = float(profile["start_speed"])

@@ -104,6 +104,8 @@ func _run() -> void:
 	# Settle a respite, if the 3000m checkpoint coincided with its warning.
 	game.center_event = "off"
 	game.next_center_metres = 1.0e9
+	game.center_first_given = true
+	game.center_pending_metres = 0.0
 	game.course.safe_sections.clear()
 	game.course.setup(441, game.world_id)
 	game.course.ensure_ahead(game.max_height_px + 3500.0, game.run_time)

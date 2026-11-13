@@ -138,12 +138,17 @@ func _test_late_bot(kilometres: float, phase: float) -> void:
 	var result := _run_collision_bot(15879, kilometres * 64000.0, phase, 6.0)
 	var context := "Hard %.0fkm phase=%.1f" % [kilometres, phase]
 	check(bool(result["survived"]), "Fast swept bot route must survive: %s %s" % [context, result["error"]])
-	check(Array(result["inputs"]).size() >= 8, "Late geometry still requires real inputs: " + context)
+	if phase == 0.0:
+		check(Array(result["inputs"]).size() >= 8, "Late DAY geometry still requires real inputs: " + context)
+	else:
+		var day_result := _run_collision_bot(15879, kilometres * 64000.0, 0.0, 6.0)
+		check(bool(day_result["survived"]), "Comparison daytime bot survives: " + context)
+		check(float(result["height"]) < float(day_result["height"]) and Array(result["inputs"]).size() < Array(day_result["inputs"]).size(), "Night/dawn restores a measurable respite compared with the same late daytime geometry: " + context)
 	check(int(result["proved_inputs"]) == Array(result["inputs"]).size(), "Late input count is backed by actual collision: " + context)
 	bot_jumps += Array(result["inputs"]).size()
 
 func _test_full_climb() -> void:
-	var result := _run_collision_bot(41, 0.0, 0.0, 240.0, 768000.0, true)
+	var result := _run_collision_bot(41, 0.0, 0.0, 420.0, 768000.0, true)
 	var inputs: Array = result["inputs"]
 	check(bool(result["survived"]), "Full Hard climb survives actual swept geometry: " + String(result["error"]))
 	check(float(result["height"]) >= 768000.0, "Full Hard bot really reaches 12000m")
@@ -152,7 +157,7 @@ func _test_full_climb() -> void:
 	var largest_gap := 0.0
 	for index in range(1, inputs.size()):
 		largest_gap = maxf(largest_gap, float(inputs[index]) - float(inputs[index - 1]))
-	check(largest_gap <= 2.5, "Full-climb rest gaps stay bounded through early pace and night: max=%.3f" % largest_gap)
+	check(largest_gap <= RushTuning.NIGHT_SECONDS + RushTuning.CYCLE_FADE_SECONDS * 2.0 + 2.5, "Full-climb gaps stay bounded by the deliberate twenty-second night respite plus fades: max=%.3f" % largest_gap)
 	print("V24 FULL CLIMB: %d collision-driven jumps, %.2fs, %.0fm" % [inputs.size(), float(result["seconds"]), float(result["height"]) / 64.0])
 	bot_jumps += inputs.size()
 
