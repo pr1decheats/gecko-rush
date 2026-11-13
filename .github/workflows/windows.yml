@@ -1,0 +1,98 @@
+name: Verify and publish Windows 2.5 (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-verified-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Read frozen source and release parts
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Reconstruct checked Windows ZIP and Android comparison package
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = Join-Path $env:RUNNER_TEMP 'gecko-windows-release'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          "WINDOWS_OUTPUT=$output" >> $env:GITHUB_ENV
+          python .github/assemble_release.py --manifest .github/release-assets/windows/manifest.json --output "$output/GeckoRush-2.5-Windows.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows ZIP assembly failed' }
+          python .github/assemble_release.py --manifest .github/release-assets/android/manifest.json --output "$output/GeckoRush-2.5.apk"
+          if ($LASTEXITCODE -ne 0) { throw 'Android comparison assembly failed' }
+          Expand-Archive -LiteralPath "$output/GeckoRush-2.5-Windows.zip" -DestinationPath "$output/app"
+
+      - name: Verify actual native PE metadata and all game scripts
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python .github/verify_windows.py --exe "$env:WINDOWS_OUTPUT/app/GeckoRush.exe" --apk "$env:WINDOWS_OUTPUT/GeckoRush-2.5.apk" --apk-sha256 27ff8128bf9d86dd92e7b52a599e3c154354870dadf215b70e562586efcdbb1d | Tee-Object -FilePath "$env:WINDOWS_OUTPUT/windows-package-verification.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package verification failed' }
+
+      - name: Launch the exact release EXE on Windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:WINDOWS_OUTPUT 'app/GeckoRush.exe'
+          $log = Join-Path $env:WINDOWS_OUTPUT 'native-windows.log'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--headless', '--audio-driver', 'Dummy', '--fixed-fps', '60', '--quit-after', '360', '--log-file', $log) -PassThru
+          if (-not $process.WaitForExit(60000)) {
+            $process.Kill()
+            throw 'Release EXE did not finish the native startup check'
+          }
+          $process.Refresh()
+          if ($process.ExitCode -ne 0) { throw "Release EXE failed with exit code $($process.ExitCode)" }
+          $text = Get-Content -LiteralPath $log -Raw
+          $text | Write-Output
+          if ($text -notmatch 'Godot Engine v4\.6\.3' -or $text -match '(?m)^(ERROR:|SCRIPT ERROR:)') {
+            throw 'Native startup log is missing or contains an engine/script error'
+          }
+          $package = Get-Content "$env:WINDOWS_OUTPUT/windows-package-verification.json" -Raw | ConvertFrom-Json
+          $report = @{
+            result = 'PASS'; source_commit = $env:GITHUB_SHA; run_id = $env:GITHUB_RUN_ID;
+            package = $package; native_windows = @{
+              exit_code = 0; mode = 'headless'; frames = 360; simulation_seconds = 6;
+              platform = [System.Environment]::OSVersion.VersionString;
+              limit = 'Native Windows startup/menu logic checked; GPU rendering and actual display FPS were not measured.'
+            }
+          }
+          $report | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 "$env:WINDOWS_OUTPUT/windows-native-verification.json"
+          $zipHash = (Get-FileHash "$env:WINDOWS_OUTPUT/GeckoRush-2.5-Windows.zip" -Algorithm SHA256).Hash.ToLower()
+          "$zipHash  GeckoRush-2.5-Windows.zip" | Set-Content -Encoding utf8 "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
+
+      - name: Keep verified Windows release and evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: GeckoRush-Windows-verified
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            ${{ env.WINDOWS_OUTPUT }}/GeckoRush-2.5-Windows.zip
+            ${{ env.WINDOWS_OUTPUT }}/windows-native-verification.json
+            ${{ env.WINDOWS_OUTPUT }}/Windows-SHA256SUMS.txt
+            ${{ env.WINDOWS_OUTPUT }}/native-windows.log
+
+      - name: Add Windows files to the existing 2.5 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release view v2.5.0 --repo $env:GITHUB_REPOSITORY --json isDraft,tagName
+          if ($LASTEXITCODE -ne 0) { throw 'Existing mobile release was not found' }
+          gh release upload v2.5.0 --repo $env:GITHUB_REPOSITORY "$env:WINDOWS_OUTPUT/GeckoRush-2.5-Windows.zip" "$env:WINDOWS_OUTPUT/windows-native-verification.json" "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows release asset upload failed; existing assets were not overwritten' }

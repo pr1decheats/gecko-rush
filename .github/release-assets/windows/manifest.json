@@ -1,0 +1,18 @@
+{
+  "filename": "GeckoRush-2.5-Windows.zip",
+  "version": "2.5.0",
+  "size": 37207919,
+  "sha256": "a3168bed43a06abb4a1b36232f9dd70dbf83378a1bb7e52f7782364757f5ae89",
+  "parts": [
+    {
+      "file": "GeckoRush-2.5-Windows.01.bin",
+      "size": 18874368,
+      "sha256": "54edefeff6b2a7aa9d47af36d66843ecd5b70a5ab4d0a77ecc37c71653e79ad0"
+    },
+    {
+      "file": "GeckoRush-2.5-Windows.02.bin",
+      "size": 18333551,
+      "sha256": "a38e801f10646771adb7b6444f5cf0f72496b6369e27338ec76d5637fe5cbe81"
+    }
+  ]
+}
