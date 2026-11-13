@@ -17,7 +17,9 @@ const LOOKAHEAD := 5000.0
 const KEEP_BEHIND := 1900.0
 const VALIDATION_RADIUS := 30.0
 const SPIKE_REACH := 84.0
-const MAX_SPEED := 2700.0
+const STREAM_AHEAD_SECONDS := 3.0
+const KEEP_BEHIND_SECONDS := 0.8
+const PHYSICS_STEP := 1.0 / 120.0
 # A biome owns its silhouettes, movement vocabulary and structure weights.
 # These are deliberately disjoint; legacy generic kinds are restore-only.
 const WORLD_TYPES := {
@@ -147,6 +149,17 @@ func begin_safe_section(start_height: float, end_height: float) -> void:
 		var item: Dictionary = hazards[i]
 		if _safe_span_intersects(float(item["h"]) - float(item["_ey"]), float(item["h"]) + float(item["_ey"])):
 			hazards.remove_at(i)
+	# Safe events may remove an already-certified gate. Keep diagnostic
+	# witness metadata honest; pressure tests use real shapes independently.
+	for action: Dictionary in witness:
+		if not bool(action.get("forced", false)):
+			continue
+		var gate_exists := false
+		for item: Dictionary in hazards:
+			if bool(item.get("gate", false)) and float(item["h"]) == float(action.get("gate_h", -INF)):
+				gate_exists = true
+				break
+		action["forced"] = gate_exists
 	for items: Array in [coins, flies]:
 		for i in range(items.size() - 1, -1, -1):
 			if section_is_safe(float(items[i]["h"])):
@@ -165,51 +178,71 @@ func _safe_span_intersects(first: float, last: float) -> bool:
 			return true
 	return false
 
+func stream_ahead_at(height_px: float) -> float:
+	# Seconds of visible route, not a fixed pixel budget that disappears at
+	# high pace. Cell spacing grows with the same local speed, bounding count.
+	return maxf(LOOKAHEAD, RushTuning.max_speed_at(height_px, world_id) * STREAM_AHEAD_SECONDS)
+
+func gate_interval_at(height_px: float) -> float:
+	var metres := maxf(height_px, 0.0) / RushTuning.PIXELS_PER_METRE
+	var progress := 1.0 - exp(-metres / 1200.0)
+	return lerpf(0.85, 0.43, progress) * float(_profile["spacing_scale"])
+
 func ensure_ahead(height_px: float, run_time: float) -> void:
 	animation_time = run_time
-	while next_cell < height_px + LOOKAHEAD:
-		_generate_cell()
-	# The hot path does no filtering, duplicate(), or polygon construction.
-	# Streaming runs every 512 pixels, rather than at 120/240 physics Hz.
+	var local_speed := RushTuning.max_speed_at(height_px, world_id)
+	var cutoff := height_px - maxf(KEEP_BEHIND, local_speed * KEEP_BEHIND_SECONDS)
 	if height_px >= _cleanup_at:
-		var cutoff := height_px - KEEP_BEHIND
-		for i in range(hazards.size() - 1, -1, -1):
-			if float(hazards[i]["h"]) + float(hazards[i]["_ey"]) < cutoff:
-				hazards.remove_at(i)
-		for i in range(coins.size() - 1, -1, -1):
-			if float(coins[i]["h"]) < cutoff or bool(coins[i].get("collected", false)):
-				coins.remove_at(i)
-		for i in range(flies.size() - 1, -1, -1):
-			if float(flies[i]["h"]) < cutoff or bool(flies[i].get("eaten", false)):
-				flies.remove_at(i)
-		for i in range(witness.size() - 1, -1, -1):
-			if float(witness[i]["cell_end"]) < cutoff:
-				witness.remove_at(i)
-		for i in range(safe_sections.size() - 1, -1, -1):
-			if float(safe_sections[i]["end"]) < cutoff:
-				safe_sections.remove_at(i)
-		_cleanup_at = height_px + 512.0
-		maintenance_runs += 1
+		_prune_behind(cutoff)
+		_cleanup_at = height_px + maxf(512.0, local_speed * 0.2)
+	var streamed := 0
+	while next_cell < height_px + stream_ahead_at(height_px):
+		_generate_cell()
+		streamed += 1
+		# A restored/test run may advance a long distance in one call. Consume
+		# the same deterministic RNG sequence without retaining old terrain.
+		if streamed % 16 == 0:
+			_prune_behind(cutoff)
+	if streamed > 0:
+		_prune_behind(cutoff)
 	_draw_needed = true
+
+func _prune_behind(cutoff: float) -> void:
+	for i in range(hazards.size() - 1, -1, -1):
+		if float(hazards[i]["h"]) + float(hazards[i]["_ey"]) < cutoff:
+			hazards.remove_at(i)
+	for i in range(coins.size() - 1, -1, -1):
+		if float(coins[i]["h"]) < cutoff or bool(coins[i].get("collected", false)):
+			coins.remove_at(i)
+	for i in range(flies.size() - 1, -1, -1):
+		if float(flies[i]["h"]) < cutoff or bool(flies[i].get("eaten", false)):
+			flies.remove_at(i)
+	for i in range(witness.size() - 1, -1, -1):
+		if float(witness[i]["cell_end"]) < cutoff:
+			witness.remove_at(i)
+	for i in range(safe_sections.size() - 1, -1, -1):
+		if float(safe_sections[i]["end"]) < cutoff:
+			safe_sections.remove_at(i)
+	maintenance_runs += 1
 
 func _generate_cell() -> void:
 	var start := next_cell
 	var intro := start < INTRO_METRES * RushTuning.PIXELS_PER_METRE
-	var base_height := float(INTRO_CELL_HEIGHTS[generated_cells % INTRO_CELL_HEIGHTS.size()]) if intro else CELL_HEIGHT
-	var cell_height := snappedf(base_height * float(_profile["spacing_scale"]), 1.0 / 1024.0)
+	var cell_height := _travel_ceiling(start, gate_interval_at(start)) - start
+	cell_height = snappedf(cell_height, 1.0 / 1024.0)
 	var previous_side := route_side
 	var breathing := not intro and generated_cells > 3 and generated_cells % 11 == 10
-	var switch_chance := 0.48 + float(_profile["motion_scale"]) * 0.14
-	var switch_side := generated_cells == 0 or _side_streak >= 2 or rng.randf() < switch_chance
-	if switch_side and not breathing:
+	# Every active cell switches because its departed wall is physically
+	# blocked. There are no central-only cells a player can camp through.
+	if not breathing:
 		route_side = 1 - route_side
-		_side_streak = 0
-	else:
-		_side_streak += 1
+	_side_streak = 0
+	var lead := RushTuning.min_speed_at(start, world_id) * rng.randf_range(0.025, 0.05)
 	var action := {
-		"height_px": start + (40.0 if generated_cells == 0 else rng.randf_range(32.0, 84.0)),
+		"height_px": start + (40.0 if generated_cells == 0 else maxf(32.0, lead)),
 		"from_side": previous_side, "to_side": route_side, "cell_start": start,
 		"cell_end": start + cell_height, "breathing": breathing,
+		"forced": not breathing,
 	}
 	var candidates: Array = []
 	var layout := 0 if generated_cells == 0 else _next_layout()
@@ -271,6 +304,24 @@ func _generate_cell() -> void:
 				_scale_hazard(gust, 0.62)
 				gust["x"] = 650.0
 				candidates.append(gust)
+	if not breathing:
+		var primary_gate: Dictionary = {}
+		for item: Dictionary in candidates:
+			if String(item.get("shape", "")) == "spikes":
+				primary_gate = item
+				break
+		if primary_gate.is_empty():
+			primary_gate = _wall_spikes(start, 0.0, 40.0)
+			candidates.append(primary_gate)
+		# At any pace the physical/visible gate spans several 120Hz samples.
+		# Swept collision additionally catches even arbitrarily thin shapes.
+		primary_gate["half_h"] = maxf(float(primary_gate["half_h"]), RushTuning.max_speed_at(start, world_id) * PHYSICS_STEP * 0.8 + 32.0)
+		primary_gate["gate"] = true
+		# The first threat is always the readable wall gate. Biome patrols
+		# follow it, so reacting to the gate does not jump into an earlier
+		# floating obstacle whose wall lane happened to look clear.
+		candidates.erase(primary_gate)
+		candidates.push_front(primary_gate)
 	# Full motion envelopes sit after a complete selected-world jump and
 	# before the next possible jump. This certificate includes every night
 	# phase, not just the phase at which the cell happened to stream in.
@@ -293,9 +344,16 @@ func _generate_cell() -> void:
 		var item: Dictionary = candidates[i]
 		if _safe_span_intersects(float(item["h"]) - float(item["_ey"]), float(item["h"]) + float(item["_ey"])):
 			candidates.remove_at(i)
+	action["forced"] = false
+	for item: Dictionary in candidates:
+		if bool(item.get("gate", false)):
+			action["forced"] = true
+			action["gate_h"] = float(item["h"])
+			action["gate_side"] = int(item["side"])
 	if not _validate_cell(action, candidates):
 		rejected_candidates += 1
 		candidates.clear()
+		action["forced"] = false
 	validated_cells += 1
 	hazards.append_array(candidates)
 	witness.append(action)
@@ -333,7 +391,7 @@ func _wall_spikes(start: float, offset: float, half_height: float) -> Dictionary
 	# Profile XP / challenge_level never changes obstacle physics.
 	return {"kind": String(WORLD_WALL_KIND[world_id]), "shape": "spikes",
 		"x": WALL_LEFT if route_side == 1 else WALL_RIGHT,
-		"h": start + offset, "side": 1 - route_side, "half_h": half_height,
+		"h": start + offset, "side": 1 - route_side, "half_h": maxf(half_height, RushTuning.max_speed_at(start, world_id) * PHYSICS_STEP * 0.8 + 24.0),
 		"phase": rng.randf_range(0.0, TAU), "passed": false}
 
 func _choose_type() -> String:
@@ -491,12 +549,28 @@ func _clamp_hazard_x(item: Dictionary) -> void:
 	var extent := float(item["r"]) + float(item.get("half_length", 0.0)) + float(item.get("motion_x", 0.0))
 	item["x"] = clampf(float(item["x"]), LEFT_X + VALIDATION_RADIUS + extent + 12.0, RIGHT_X - VALIDATION_RADIUS - extent - 12.0)
 
+func _travel_ceiling(height_px: float, seconds: float, extra_height: float = 0.0) -> float:
+	# A constant-at-the-end speed bounds the whole monotone day trajectory.
+	# Solve its local quadratic exactly; there is no global certification cap.
+	# Splitting a long interval also handles very steep future curve sections.
+	var origin := height_px + extra_height
+	var kilometre_px := RushTuning.PIXELS_PER_METRE * 1000.0
+	var quadratic := float(_profile["endless_quadratic"]) / (kilometre_px * kilometre_px)
+	var slope := (float(_profile["growth_per_km"]) + 2.0 * float(_profile["endless_quadratic"]) * maxf(origin, 0.0) / kilometre_px) / kilometre_px
+	var a := seconds * quadratic
+	var b := 1.0 - seconds * slope
+	var c := seconds * RushTuning.max_speed_at(origin, world_id)
+	var discriminant := b * b - 4.0 * a * c
+	if discriminant <= 0.0 or b <= 0.0:
+		var middle := _travel_ceiling(origin, seconds * 0.5)
+		return _travel_ceiling(middle, seconds * 0.5)
+	var travel := 2.0 * c / (b + sqrt(discriminant))
+	return origin + travel + 0.001
+
 func _jump_ceiling(jump_start: float) -> float:
-	# Selected-world ceiling at this altitude, with an altitude upper bound
-	# for all substeps of the 0.24s jump and all day/night transitions.
-	var upper_height := jump_start + float(_profile["max_speed"]) * JUMP_DURATION + JUMP_ARC
-	var speed := maxf(_world_speed_at(upper_height), float(_profile["night_speed"]))
-	return jump_start + speed * JUMP_DURATION + JUMP_ARC
+	# Main advances one complete final physics frame even when it clamps the
+	# last jump fraction; include that frame and the maximum upward arc.
+	return _travel_ceiling(jump_start, JUMP_DURATION + PHYSICS_STEP, JUMP_ARC)
 
 func _spawn_items(action: Dictionary) -> void:
 	var start := float(action["cell_start"])
@@ -510,7 +584,7 @@ func _spawn_items(action: Dictionary) -> void:
 		coins.append({"x": 540.0, "h": h, "collected": false, "phase": rng.randf_range(0.0, TAU)})
 		has_coin = true
 	elif generated_cells % 4 == 3 and rng.randf() < 0.84:
-		coins.append({"x": LEFT_X if safe_side == 0 else RIGHT_X, "h": start + 780.0, "collected": false, "phase": rng.randf_range(0.0, TAU)})
+		coins.append({"x": LEFT_X if safe_side == 0 else RIGHT_X, "h": lerpf(_jump_ceiling(float(action["height_px"])) + VALIDATION_RADIUS, float(action["cell_end"]) - VALIDATION_RADIUS, 0.62), "collected": false, "phase": rng.randf_range(0.0, TAU)})
 		has_coin = true
 	if generated_cells % 3 == 1 and not has_coin:
 		flies.append({"x": WALL_LEFT + 14.0 if safe_side == 0 else WALL_RIGHT - 14.0,
@@ -540,7 +614,7 @@ func _cache_geometry(item: Dictionary) -> void:
 		var x := WALL_LEFT if side == 0 else WALL_RIGHT
 		var top := center.y - ey
 		var triangles: Array = []
-		var teeth := maxi(2, roundi(ey * 2.0 / 35.0))
+		var teeth := clampi(roundi(ey * 2.0 / 35.0), 2, 8)
 		var tooth_height := ey * 2.0 / float(teeth)
 		for i in range(teeth):
 			var y := top + float(i) * tooth_height
@@ -621,6 +695,8 @@ func _validate_action_motion(action: Dictionary, time_offset: float) -> bool:
 		# represent the witness's exact scheduled press rather than delaying it.
 		if not launched:
 			dt = minf(dt, maxf(0.000001, (float(action["height_px"]) - height) / RushTuning.run_speed_at(height, time + dt, world_id)))
+		var previous_point := Vector2(x, -height)
+		var previous_time := time
 		time += dt
 		height += RushTuning.run_speed_at(height, time, world_id) * dt
 		if jump_elapsed >= 0.0:
@@ -631,7 +707,7 @@ func _validate_action_motion(action: Dictionary, time_offset: float) -> bool:
 			x = lerpf(from_x, to_x, 0.5 - cos(fraction * PI) * 0.5)
 			if jump_elapsed >= JUMP_DURATION:
 				jump_elapsed = -1.0
-		if collision_at(Vector2(x, -height), time, VALIDATION_RADIUS):
+		if not collision_kind_along(previous_point, Vector2(x, -height), previous_time, time, VALIDATION_RADIUS).is_empty():
 			return false
 	return true
 
@@ -709,6 +785,81 @@ func collision_kind_at(point: Vector2, time: float, radius: float = 20.0) -> Str
 				return death_kind
 	return ""
 
+func collision_kind_along(from: Vector2, to: Vector2, start_time: float, end_time: float, radius: float = 20.0) -> String:
+	# A 120Hz step can cross an entire small obstacle at late-run pace.
+	# Sweep the actual cached shape instead of increasing arbitrary substeps.
+	var first_height := minf(-from.y, -to.y)
+	var last_height := maxf(-from.y, -to.y)
+	for section: Dictionary in safe_sections:
+		if first_height >= float(section["start"]) and last_height <= float(section["end"]):
+			return ""
+	var middle_time := (start_time + end_time) * 0.5
+	var duration := absf(end_time - start_time)
+	for item: Dictionary in hazards:
+		if first_height > float(item["h"]) + float(item["_ey"]) + radius or last_height < float(item["h"]) - float(item["_ey"]) - radius:
+			continue
+		if not _hazard_active(item, start_time) and not _hazard_active(item, middle_time) and not _hazard_active(item, end_time):
+			continue
+		var kind := String(item["kind"])
+		var death_kind := "electric" if kind == "electric" or kind == "lightning" or kind == "storm_orb" else kind
+		var shape := String(item.get("shape", "circle"))
+		if shape == "spikes":
+			for triangle: PackedVector2Array in item["_triangles"]:
+				if _segment_hits_polygon(from, to, radius, triangle):
+					return death_kind
+			continue
+		# Relative endpoints incorporate actual translation. The small chord
+		# error uses the sine's second-derivative bound; angular motion expands
+		# only by its maximum displacement within this one physics frame.
+		var relative_from := from - _hazard_center(item, start_time)
+		var relative_to := to - _hazard_center(item, end_time)
+		var frequency := absf(float(item.get("frequency", 1.0)))
+		var translation := absf(float(item.get("amplitude", item.get("motion_x", 0.0)))) + _motion_y(item)
+		var margin := translation * frequency * frequency * duration * duration * 0.125
+		var half_length := float(item.get("half_length", 0.0))
+		var turn_rate := absf(float(item.get("spin", 0.0))) + absf(float(item.get("angle_sway", 0.0))) * frequency
+		margin += (float(item["r"]) + half_length) * turn_rate * duration * 0.5
+		var rotation := -_hazard_rotation(item, middle_time)
+		relative_from = relative_from.rotated(rotation)
+		relative_to = relative_to.rotated(rotation)
+		if shape == "polygon":
+			if _segment_hits_polygon(relative_from, relative_to, radius + margin, item["_polygon"]):
+				return death_kind
+		elif shape == "capsule":
+			var reach := radius + float(item["r"]) + margin
+			if _segment_distance_squared(relative_from, relative_to, Vector2(-half_length, 0), Vector2(half_length, 0)) <= reach * reach:
+				return death_kind
+		else:
+			var reach := radius + float(item["r"]) + margin
+			if Geometry2D.get_closest_point_to_segment(Vector2.ZERO, relative_from, relative_to).length_squared() <= reach * reach:
+				return death_kind
+	return ""
+
+static func _segment_hits_polygon(from: Vector2, to: Vector2, radius: float, polygon: PackedVector2Array) -> bool:
+	if Geometry2D.is_point_in_polygon(from, polygon) or Geometry2D.is_point_in_polygon(to, polygon):
+		return true
+	var squared := radius * radius
+	for index in range(polygon.size()):
+		if _segment_distance_squared(from, to, polygon[index], polygon[(index + 1) % polygon.size()]) <= squared:
+			return true
+	return false
+
+static func _segment_distance_squared(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
+	if Geometry2D.segment_intersects_segment(a, b, c, d) != null:
+		return 0.0
+	return minf(minf(Geometry2D.get_closest_point_to_segment(a, c, d).distance_squared_to(a), Geometry2D.get_closest_point_to_segment(b, c, d).distance_squared_to(b)), minf(Geometry2D.get_closest_point_to_segment(c, a, b).distance_squared_to(c), Geometry2D.get_closest_point_to_segment(d, a, b).distance_squared_to(d)))
+
+func collect_along(from: Vector2, to: Vector2) -> int:
+	var collected := 0
+	for coin: Dictionary in coins:
+		if bool(coin.get("collected", false)):
+			continue
+		var point := Vector2(float(coin["x"]), -float(coin["h"]))
+		if Geometry2D.get_closest_point_to_segment(point, from, to).distance_squared_to(point) <= 48.0 * 48.0:
+			coin["collected"] = true
+			collected += 1
+	return collected
+
 func collect_at(point: Vector2, _time: float) -> int:
 	var collected := 0
 	for coin: Dictionary in coins:
@@ -745,7 +896,7 @@ func snapshot() -> Dictionary:
 		for key: String in ["_triangles", "_polygon", "_bounds", "_ey", "_end_h"]:
 			clean.erase(key)
 		clean_hazards.append(clean)
-	return {"version": 5, "seed": str(seed_value), "rng_state": str(rng.state),
+	return {"version": 6, "seed": str(seed_value), "rng_state": str(rng.state),
 		"world": world_id, "hazards": clean_hazards, "coins": coins.duplicate(true),
 		"flies": flies.duplicate(true), "witness": witness.duplicate(true),
 		"next_cell": next_cell, "route_side": route_side, "generated_cells": generated_cells,
@@ -762,7 +913,7 @@ func restore(data: Dictionary) -> void:
 		world_id = "jungle"
 	_profile = RushTuning.profile_for(world_id)
 	challenge_level = int(data.get("challenge_level", 1))
-	if not int(data.get("version", 0)) in [2, 3, 4, 5]:
+	if not int(data.get("version", 0)) in [2, 3, 4, 5, 6]:
 		setup(seed_value, world_id)
 		return
 	rng.seed = seed_value
@@ -838,7 +989,7 @@ func _draw() -> void:
 			var direction := 1.0 if int(item["side"]) == 0 else -1.0
 			draw_set_transform(center, 0.0, Vector2(direction, 1.0))
 			var half_height := float(item["half_h"])
-			var teeth := maxi(2, roundi(half_height * 2.0 / 35.0))
+			var teeth := clampi(roundi(half_height * 2.0 / 35.0), 2, 8)
 			var tooth_height := half_height * 2.0 / float(teeth)
 			for index in range(teeth):
 				# One cached tooth per collision triangle; no stretched tooth count.

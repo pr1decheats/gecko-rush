@@ -11,12 +11,12 @@ const TUNING = preload("res://scripts/tuning.gd")
 const SKIN_PRICE: int = 100
 const ANDROID_REFRESH = preload("res://scripts/android_refresh.gd")
 const WORLDS: Array = [
-	{"id": "jungle", "name": "Лёгкий", "name_en": "Easy", "theme_name": "Джунгли", "unlock": 1, "previous_world": "", "required_metres": 0.0, "hazards": ["root", "beetle", "vine", "thorns"]},
-	{"id": "canyon", "name": "Обычный", "name_en": "Normal", "theme_name": "Каньон", "unlock": 5, "previous_world": "jungle", "required_metres": 300.0, "hazards": ["boulder", "rockfall", "canyon_weight", "sand_spur"]},
-	{"id": "ice", "name": "Сложный", "name_en": "Hard", "theme_name": "Лёд", "unlock": 12, "previous_world": "canyon", "required_metres": 450.0, "hazards": ["icicle", "ice_chunk", "frost", "ice_teeth"]},
-	{"id": "crystal", "name": "Эксперт", "name_en": "Expert", "theme_name": "Кристаллы", "unlock": 20, "previous_world": "ice", "required_metres": 650.0, "hazards": ["prism", "crystal_beam", "shard", "crystal_teeth"]},
-	{"id": "volcano", "name": "Кошмар", "name_en": "Nightmare", "theme_name": "Вулкан", "unlock": 30, "previous_world": "crystal", "required_metres": 850.0, "hazards": ["lava_orb", "fire_jet", "obsidian", "magma_teeth"]},
-	{"id": "sky", "name": "Безумие", "name_en": "Insane", "theme_name": "Небо", "unlock": 50, "previous_world": "volcano", "required_metres": 1100.0, "hazards": ["lightning", "storm_orb", "wind_blade", "storm_spikes"]}
+	{"id": "jungle", "world_name": "Джунгли", "name": "Лёгкий", "name_en": "Easy", "theme_name": "Джунгли", "unlock": 1, "previous_world": "", "required_metres": 0.0, "hazards": ["root", "beetle", "vine", "thorns"]},
+	{"id": "canyon", "world_name": "Каньон", "name": "Обычный", "name_en": "Normal", "theme_name": "Каньон", "unlock": 5, "previous_world": "jungle", "required_metres": 300.0, "hazards": ["boulder", "rockfall", "canyon_weight", "sand_spur"]},
+	{"id": "ice", "world_name": "Ледяные скалы", "name": "Сложный", "name_en": "Hard", "theme_name": "Лёд", "unlock": 12, "previous_world": "canyon", "required_metres": 450.0, "hazards": ["icicle", "ice_chunk", "frost", "ice_teeth"]},
+	{"id": "crystal", "world_name": "Кристальные пещеры", "name": "Эксперт", "name_en": "Expert", "theme_name": "Кристаллы", "unlock": 20, "previous_world": "ice", "required_metres": 650.0, "hazards": ["prism", "crystal_beam", "shard", "crystal_teeth"]},
+	{"id": "volcano", "world_name": "Вулкан", "name": "Кошмар", "name_en": "Nightmare", "theme_name": "Вулкан", "unlock": 30, "previous_world": "crystal", "required_metres": 850.0, "hazards": ["lava_orb", "fire_jet", "obsidian", "magma_teeth"]},
+	{"id": "sky", "world_name": "Небесные острова", "name": "Безумие", "name_en": "Insane", "theme_name": "Небо", "unlock": 50, "previous_world": "volcano", "required_metres": 1100.0, "hazards": ["lightning", "storm_orb", "wind_blade", "storm_spikes"]}
 ]
 const ACHIEVEMENTS: Array = [
 	{"id": "first_jump", "name": "Первый прыжок", "title": "Первый прыжок", "description": "Перепрыгните на другую стену", "target": 1, "xp": 15},
@@ -174,7 +174,7 @@ func _sanitize(raw: Dictionary) -> Dictionary:
 			if settings.get(key) is bool:
 				clean["settings"][key] = settings[key]
 		for key: String in ["theme", "language"]:
-			var allowed: Array = ["dark", "light"] if key == "theme" else ["ru", "en"]
+			var allowed: Array = ["dark", "light"] if key == "theme" else ["ru", "en", "uk"]
 			if settings.get(key) is String and settings[key] in allowed:
 				clean["settings"][key] = settings[key]
 		if (settings.get("fps") is int or settings.get("fps") is float) and float(settings["fps"]) in [60.0, 120.0]:

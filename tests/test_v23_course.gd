@@ -45,7 +45,7 @@ func _run() -> void:
 			root.add_child(course)
 			course.setup(seed_index * 7919 + 41, world)
 			check(not course.collision_at(Vector2(CourseScript.LEFT_X, -800.0), 0.0), "Opening must be safe: " + world)
-			for height: float in [0.0, 12000.0, 68000.0, 160000.0]:
+			for height: float in [0.0, 64000.0, 256000.0, 768000.0, 1600000.0]:
 				course.ensure_ahead(height, height / 900.0)
 				var context := "%s seed=%d height=%d" % [world, seed_index, int(height)]
 				check(course.validate_witness(), "Invalid complete-motion certificate: " + context)
@@ -78,12 +78,21 @@ func _test_world_profiles() -> void:
 		check(float(profile["start_speed"]) >= previous_speed, "Selected difficulty orders starting speed: " + world)
 		check(float(profile["spacing_scale"]) <= previous_spacing, "Selected difficulty orders spacing: " + world)
 		check(float(profile["motion_scale"]) >= previous_motion, "Selected difficulty orders motion: " + world)
-		for height: float in [0.0, 16000.0, 64000.0, 128000.0, 1000000.0]:
-			check(RushTuning.speed_at(height, world) <= 2700.0, "Day speed cap: " + world)
-			check(RushTuning.run_speed_at(height, 45.0, world) == float(profile["night_speed"]), "Night uses selected-world speed: " + world)
+		var previous_day := 0.0
+		var previous_night := 0.0
+		for height: float in [0.0, 64000.0, 256000.0, 768000.0, 1600000.0]:
+			var day := RushTuning.speed_at(height, world)
+			var night := RushTuning.run_speed_at(height, 45.0, world)
+			check(day > previous_day, "Day speed continues increasing at every altitude: " + world)
+			check(night > previous_night, "Night speed continues increasing at every altitude: " + world)
+			check(is_equal_approx(night, day * float(profile["night_multiplier"])), "Night scales the selected world's current-height pace: " + world)
+			previous_day = day
+			previous_night = night
 		previous_speed = float(profile["start_speed"])
 		previous_spacing = float(profile["spacing_scale"])
 		previous_motion = float(profile["motion_scale"])
+	check(RushTuning.speed_at(256000.0, "ice") > 5000.0, "Hard exceeds the former speed cap by 4km")
+	check(RushTuning.speed_at(768000.0, "ice") > 15000.0, "Hard keeps accelerating through 12km")
 	var easiest = CourseScript.new()
 	var hardest = CourseScript.new()
 	root.add_child(easiest)
@@ -92,7 +101,9 @@ func _test_world_profiles() -> void:
 	hardest.setup(983, "sky")
 	var easy_span := float(easiest.witness[0]["cell_end"]) - float(easiest.witness[0]["cell_start"])
 	var hard_span := float(hardest.witness[0]["cell_end"]) - float(hardest.witness[0]["cell_start"])
-	check(easy_span > hard_span, "Selected-world spacing must change generated geometry")
+	check(easy_span > 0.0 and hard_span > 0.0, "Selected-world spacing creates positive physical cells")
+	check(easy_span / RushTuning.speed_at(0.0, "jungle") > hard_span / RushTuning.speed_at(0.0, "sky"), "Selected-world spacing gives the easier world more time between inputs")
+	check(easiest.gate_interval_at(0.0) > hardest.gate_interval_at(0.0), "World selection directly controls the temporal obstacle interval")
 	easiest.free()
 	hardest.free()
 	for first: String in WORLDS:
@@ -224,27 +235,31 @@ func _simulate_witness(course, start_time: float) -> bool:
 		var jump_start := float(action["height_px"])
 		while height < jump_start:
 			var dt := minf(STEP, maxf(0.000001, (jump_start - height) / RushTuning.run_speed_at(height, clock + STEP, course.world_id)))
+			var before := Vector2(source_x, -height)
 			clock += dt
 			height += RushTuning.run_speed_at(height, clock, course.world_id) * dt
-			if course.collision_at(Vector2(source_x, -height), clock, ROUTE_RADIUS):
+			if not course.collision_kind_along(before, Vector2(source_x, -height), clock - dt, clock, ROUTE_RADIUS).is_empty():
 				return false
 		if source_x != target_x:
 			var elapsed := 0.0
 			while elapsed < CourseScript.JUMP_DURATION - 0.000001:
 				var dt := minf(STEP, CourseScript.JUMP_DURATION - elapsed)
 				var old_fraction := elapsed / CourseScript.JUMP_DURATION
+				var old_x := lerpf(source_x, target_x, 0.5 - 0.5 * cos(PI * old_fraction))
+				var before := Vector2(old_x, -height)
 				elapsed += dt
 				var fraction := elapsed / CourseScript.JUMP_DURATION
 				clock += dt
 				height += RushTuning.run_speed_at(height, clock, course.world_id) * dt
 				height += (sin(fraction * PI) - sin(old_fraction * PI)) * CourseScript.JUMP_ARC
 				var x := lerpf(source_x, target_x, 0.5 - 0.5 * cos(PI * fraction))
-				if course.collision_at(Vector2(x, -height), clock, ROUTE_RADIUS):
+				if not course.collision_kind_along(before, Vector2(x, -height), clock - dt, clock, ROUTE_RADIUS).is_empty():
 					return false
 		while height < float(action["cell_end"]):
+			var before := Vector2(target_x, -height)
 			clock += STEP
 			height += RushTuning.run_speed_at(height, clock, course.world_id) * STEP
-			if course.collision_at(Vector2(target_x, -height), clock, ROUTE_RADIUS):
+			if not course.collision_kind_along(before, Vector2(target_x, -height), clock - STEP, clock, ROUTE_RADIUS).is_empty():
 				return false
 	return true
 

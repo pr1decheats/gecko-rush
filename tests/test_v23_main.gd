@@ -7,11 +7,9 @@ var game: Node
 var p: Node
 const STEP := 1.0 / 120.0
 const WORLDS := ["jungle", "canyon", "ice", "crystal", "volcano", "sky"]
-const STARTS := [720.0, 840.0, 960.0, 1080.0, 1200.0, 1320.0]
-const MAXIMA := [1700.0, 1950.0, 2200.0, 2450.0, 2650.0, 2700.0]
-const NIGHTS := [680.0, 800.0, 920.0, 1040.0, 1160.0, 1280.0]
-const FIRST_RAMPS := [500.0, 460.0, 420.0, 380.0, 340.0, 300.0]
-const CAP_METRES := [3200.0, 3000.0, 2800.0, 2600.0, 2400.0, 2200.0]
+const STARTS := [800.0, 900.0, 1000.0, 1120.0, 1240.0, 1380.0]
+const ONE_KM := [1662.0, 1916.0, 2200.0, 2494.0, 2809.0, 3175.0]
+const FOUR_KM := [4392.0, 5156.0, 6040.0, 6904.0, 7864.0, 8980.0]
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -93,56 +91,59 @@ func _test_selected_speed_profiles() -> void:
 		check(game.current_speed() == STARTS[index] and game.speed_at(0.0) == STARTS[index], "main uses selected initial pace: " + id)
 		game._simulate_step(STEP)
 		check(is_equal_approx(game.height_px, STARTS[index] * STEP), "actual first physics step uses selected pace: " + id)
-		_place_safe(FIRST_RAMPS[index] * 0.5, 10.0)
+		_place_safe(1000.0, 10.0)
 		var before: float = game.height_px
-		var half_ramp: float = STARTS[index] + (MAXIMA[index] - STARTS[index]) * 0.175
 		game._simulate_step(STEP)
-		check(absf(game.height_px - before - half_ramp * STEP) < 0.000001, "actual early acceleration follows selected gradual ramp: " + id)
-		game.max_height_px = CAP_METRES[index] * RushTuning.PIXELS_PER_METRE
-		check(game.current_speed() == MAXIMA[index], "selected maximum arrives at its own distance: " + id)
+		check(absf(game.height_px - before - ONE_KM[index] * STEP) < 0.000001, "actual 1000m physics follows the selected distance curve: " + id)
+		game.max_height_px = 4000.0 * RushTuning.PIXELS_PER_METRE
+		check(game.current_speed() == FOUR_KM[index] and game.current_speed() > ONE_KM[index], "selected world keeps accelerating beyond its former cap distance: " + id)
 		for height: float in [0.0, 1000.0, 9000.0]:
 			game.max_height_px = height * RushTuning.PIXELS_PER_METRE
+			var night_speed: float = game.speed_at(game.max_height_px) * 0.85
 			for second: float in [40.0, 45.0, 59.99, 100.0, 119.99]:
 				game.run_time = second
-				check(game.current_speed() == NIGHTS[index], "night is flat across distance and time for " + id)
+				check(is_equal_approx(game.current_speed(), night_speed), "night retains the selected height curve with a fifteen percent slowdown: " + id)
 		_place_safe(1000.0, 46.0)
 		before = game.height_px
 		game._simulate_step(STEP)
-		check(absf(game.height_px - before - NIGHTS[index] * STEP) < 0.000001, "real night physics uses selected fixed speed: " + id)
-		game.max_height_px = CAP_METRES[index] * RushTuning.PIXELS_PER_METRE
-		var previous: float = NIGHTS[index]
+		check(absf(game.height_px - before - ONE_KM[index] * 0.85 * STEP) < 0.000001, "real night physics uses the selected world curve: " + id)
+		game.max_height_px = 4000.0 * RushTuning.PIXELS_PER_METRE
+		var previous: float = FOUR_KM[index] * 0.85
 		for second: float in [60.0, 61.0, 62.0, 63.0, 64.0]:
 			game.run_time = second
 			var speed: float = game.current_speed()
-			check(speed >= previous and speed >= NIGHTS[index] and speed <= MAXIMA[index], "selected dawn stays continuous and bounded: " + id)
+			check(speed >= previous and speed >= FOUR_KM[index] * 0.85 and speed <= FOUR_KM[index], "selected dawn stays continuous between local night and day speeds: " + id)
 			if second > 60.0:
 				check(speed > previous, "selected dawn accelerates on every transition sample: " + id)
 			previous = speed
-		check(previous == MAXIMA[index], "dawn reaches selected daytime maximum: " + id)
+		check(previous == FOUR_KM[index], "dawn reaches the selected local daytime curve: " + id)
 
 func _test_center_prediction() -> void:
 	_fresh()
+	var previous_end := 0.0
 	for index: int in WORLDS.size():
 		var id: String = WORLDS[index]
 		_launch(id)
 		game.height_px = 1500.0 * RushTuning.PIXELS_PER_METRE
 		game.max_height_px = game.height_px
-		game.run_time = 47.0
+		game.run_time = 70.0
 		for seed: int in range(200):
 			game.run_seed = seed
 			game.next_center_metres = 1500.0
+			game.center_next_allowed_time = 0.0
+			game.center_event = "off"
 			game.course.safe_sections.clear()
 			game._begin_center_event()
 			if game.center_will_appear:
 				break
 		check(game.center_will_appear and game.course.safe_sections.size() == 1, "accepted central respite protects one course interval: " + id)
-		var predicted_duration := RushTuning.CENTER_PREVIEW_SECONDS + RushTuning.CENTER_ENTER_SECONDS + RushTuning.CENTER_RIDE_SECONDS + RushTuning.CENTER_EXIT_SECONDS + 0.65
-		# Safety prediction rounds its integration up to a complete 60Hz tick.
-		var expected_end: float = game.max_height_px + NIGHTS[index] * ceili(predicted_duration * 60.0) / 60.0 + 350.0 + game.course.SAFE_SECTION_PADDING
-		check(absf(float(game.course.safe_sections[0].end) - expected_end) < 0.00001, "central safety prediction uses this world's night pace: " + id)
+		var protected_end: float = game.course.safe_sections[0].end
+		check(protected_end > previous_end, "central safety prediction follows the selected world's increasing pace: " + id)
+		previous_end = protected_end
 		for step: int in range(910):
 			game._simulate_step(STEP)
 		check(game.state == game.State.RUNNING and game.center_event == "off", "real selected-speed central transfer completes safely: " + id)
+		check(protected_end > game.height_px + game.current_speed() * 0.4, "selected-world transfer retains a reaction margin after returning to the wall: " + id)
 
 func _test_result_attribution() -> void:
 	_fresh()
@@ -197,7 +198,7 @@ func _test_resume_roundtrips() -> void:
 			var speed_before: float = game.current_speed()
 			game._pause_run()
 			var saved: Dictionary = p.load_resume()
-			check(int(saved.schema) == 5 and saved.world_id == id and saved.course.world == id, "schema5 stores run and course world consistently: " + id)
+			check(int(saved.schema) == 6 and saved.world_id == id and saved.course.world == id, "schema6 stores run and course world consistently: " + id)
 			p.load_game()
 			game._show_menu()
 			game._on_action("world", WORLDS[(index + 1) % WORLDS.size()])

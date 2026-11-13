@@ -23,10 +23,10 @@ jobs:
       contents: write
     env:
       GODOT_VERSION: 4.6.3
-      RELEASE_VERSION: "2.3.0"
-      RELEASE_BUILD: "5"
-      RELEASE_TAG: v2.3.0
-      RELEASE_BASENAME: GeckoRush-2.3
+      RELEASE_VERSION: "2.4.0"
+      RELEASE_BUILD: "6"
+      RELEASE_TAG: v2.4.0
+      RELEASE_BASENAME: GeckoRush-2.4
     defaults:
       run:
         shell: bash
@@ -149,6 +149,46 @@ jobs:
           test -s "$IOS_EXPORT_ROOT/GeckoRush.pck"
           test -d "$IOS_EXPORT_ROOT/GeckoRush.xcframework"
           xcodebuild -list -project "$IOS_EXPORT_ROOT/GeckoRush.xcodeproj"
+
+      - name: Verify exported Triada Games launch branding
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$IOS_EXPORT_ROOT/branding-verification.log"
+          import json
+          import os
+          from pathlib import Path
+          import plistlib
+          import xml.etree.ElementTree as ET
+
+          project = Path(os.environ["IOS_EXPORT_ROOT"]) / "GeckoRush"
+          storyboard = project / "Launch Screen.storyboard"
+          document = ET.parse(storyboard).getroot()
+          if document.get("launchScreen") != "YES":
+              raise SystemExit("Exported storyboard is not a native iOS launch screen")
+          views = list(document.iter("imageView"))
+          if len(views) != 1 or views[0].get("image") != "SplashImage" or views[0].get("contentMode") != "scaleAspectFit":
+              raise SystemExit("Native iOS launch screen must aspect-fit only the supplied SplashImage")
+          if any("$launch_screen" in value for element in document.iter() for value in element.attrib.values()):
+              raise SystemExit("Native iOS launch storyboard contains an unresolved export placeholder")
+          info = plistlib.loads((project / "GeckoRush-Info.plist").read_bytes())
+          if info.get("UILaunchStoryboardName") != "Launch Screen":
+              raise SystemExit("Exported Info.plist does not select the checked native launch storyboard")
+          asset = project / "Images.xcassets" / "SplashImage.imageset"
+          content = json.loads((asset / "Contents.json").read_text())
+          images = content.get("images", [])
+          for scale, name in (("2x", "splash@2x.png"), ("3x", "splash@3x.png")):
+              if not any(image.get("scale") == scale and image.get("filename") == name for image in images):
+                  raise SystemExit(f"Native launch asset catalog does not select {name} at {scale}")
+              if not (asset / name).is_file():
+                  raise SystemExit(f"Native launch image is absent: {name}")
+          print("IOS_BRANDING_STORYBOARD_PASS: Launch Screen, SplashImage, scaleAspectFit, @2x/@3x catalog")
+          PY
+          "$GODOT_BIN" --headless --path "$GECKO_IOS_STAGING_DIR" \
+            --script "$GITHUB_WORKSPACE/.github/check_ios_branding.gd" -- \
+            "$GECKO_IOS_STAGING_DIR/assets/triada-games.png" \
+            "$IOS_EXPORT_ROOT/GeckoRush/Images.xcassets/SplashImage.imageset/splash@2x.png" \
+            "$IOS_EXPORT_ROOT/GeckoRush/Images.xcassets/SplashImage.imageset/splash@3x.png" \
+            2>&1 | tee -a "$IOS_EXPORT_ROOT/branding-verification.log"
 
       - name: Build a real iPhone app without signing
         run: |

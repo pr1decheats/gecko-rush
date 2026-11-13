@@ -34,8 +34,8 @@ func _run() -> void:
 			course.setup(seed_index * 7919 + 41, world)
 			check(not course.collision_at(Vector2(296.0, -800.0), 0.0), "Opening lane must be safe")
 			# Check different speeds, world distributions, phases and streamed
-			# neighbouring cells, all the way to the speed cap.
-			for height: float in [0.0, 5500.0, 18000.0, 39000.0, 68000.0]:
+			# neighbouring cells, including heights far beyond the former cap.
+			for height: float in [0.0, 5500.0, 18000.0, 68000.0, 256000.0, 768000.0]:
 				course.ensure_ahead(height, height / 330.0)
 				check(course.validate_witness(), "Unsafe witness: world=%s seed=%d height=%f" % [world, seed_index, height])
 				check(course.hazards.size() < 33, "Hazards must be streamed and bounded")
@@ -71,26 +71,30 @@ func _simulate_witness(course, phase_height: float) -> bool:
 		var time := phase_height / 290.0 + float(action["cell_start"]) / 320.0
 		while h < float(action["height_px"]):
 			var dt := minf(STEP, maxf(0.000001, (float(action["height_px"]) - h) / RushTuning.run_speed_at(h, time + STEP, course.world_id)))
+			var before := Vector2(source_x, -h)
 			time += dt
 			h += RushTuning.run_speed_at(h, time, course.world_id) * dt
-			if course.collision_at(Vector2(source_x, -h), time, 28.0):
+			if not course.collision_kind_along(before, Vector2(source_x, -h), time - dt, time, 28.0).is_empty():
 				return false
 		if source_side != target_side:
 			var elapsed := 0.0
 			while elapsed < CourseScript.JUMP_DURATION - 0.000001:
 				var dt := minf(STEP, CourseScript.JUMP_DURATION - elapsed)
 				var previous := elapsed / CourseScript.JUMP_DURATION
+				var previous_x := lerpf(source_x, target_x, 0.5 - 0.5 * cos(PI * previous))
+				var before := Vector2(previous_x, -h)
 				elapsed += dt
 				var t := elapsed / CourseScript.JUMP_DURATION
 				time += dt
 				h += RushTuning.run_speed_at(h, time, course.world_id) * dt + (sin(PI * t) - sin(PI * previous)) * CourseScript.JUMP_ARC
 				var x := lerpf(source_x, target_x, 0.5 - 0.5 * cos(PI * t))
-				if course.collision_at(Vector2(x, -h), time, 28.0):
+				if not course.collision_kind_along(before, Vector2(x, -h), time - dt, time, 28.0).is_empty():
 					return false
 		while h < float(action["cell_end"]):
+			var before := Vector2(target_x, -h)
 			time += STEP
 			h += RushTuning.run_speed_at(h, time, course.world_id) * STEP
-			if course.collision_at(Vector2(target_x, -h), time, 28.0):
+			if not course.collision_kind_along(before, Vector2(target_x, -h), time - STEP, time, 28.0).is_empty():
 				return false
 	return true
 

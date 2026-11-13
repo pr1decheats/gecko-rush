@@ -31,33 +31,34 @@ func _run() -> void:
 	await process_frame
 	fresh()
 	var previous_start := 0.0
-	var previous_cap := 0.0
+	var previous_late := 0.0
 	var previous_xp := 0.0
 	for world: Dictionary in p.WORLDS:
 		var id: String = world["id"]
 		var profile: Dictionary = TUNING.profile_for(id)
-		check(profile["start_speed"] > previous_start and profile["max_speed"] > previous_cap, id + " has a distinct increasing pace")
-		check(profile["max_speed"] <= TUNING.MAX_SPEED, id + " respects certified absolute speed cap")
+		var late_speed: float = TUNING.speed_at(12000.0 * TUNING.PIXELS_PER_METRE, id)
+		check(profile["start_speed"] > previous_start and late_speed > previous_late, id + " has a distinct increasing pace at the start and beyond 12km")
+		check(late_speed > TUNING.MAX_SPEED and TUNING.speed_at(50000.0 * TUNING.PIXELS_PER_METRE, id) > late_speed, id + " keeps accelerating beyond the deprecated compatibility ceiling")
 		check(profile["xp_multiplier"] > previous_xp, id + " rewards difficulty with more XP")
 		check(TUNING.speed_at(-100.0, id) == profile["start_speed"], id + " clamps negative distance")
-		check(TUNING.speed_at(1.0e12, id) == profile["max_speed"], id + " reaches its own cap")
-		check(TUNING.run_speed_at(100000.0, 45.0, id) == profile["night_speed"], id + " uses its own night pace")
+		check(TUNING.speed_at(1.0e12, id) > late_speed, id + " has no final distance or speed cap")
+		check(is_equal_approx(TUNING.run_speed_at(100000.0, 45.0, id), TUNING.speed_at(100000.0, id) * 0.85), id + " uses its own height curve at night")
 		var last_speed: float = profile["start_speed"]
 		var increasing := true
 		for metres: int in range(0, 3501, 25):
 			var speed: float = TUNING.speed_at(float(metres) * TUNING.PIXELS_PER_METRE, id)
-			increasing = increasing and speed >= last_speed and speed <= float(profile["max_speed"])
+			increasing = increasing and speed >= last_speed
 			last_speed = speed
-		check(increasing, id + " acceleration is monotonic and bounded")
-		check(TUNING.speed_at(64.0, id) - float(profile["start_speed"]) < 0.03, id + " starts acceleration gently")
-		check(absf(TUNING.run_speed_at(64000.0, 39.999, id) - float(profile["night_speed"])) < 0.01, id + " dusk joins night continuously")
-		check(absf(TUNING.run_speed_at(64000.0, 60.001, id) - float(profile["night_speed"])) < 0.01, id + " dawn begins continuously")
+		check(increasing, id + " acceleration is monotonic")
+		check(TUNING.speed_at(640.0, id) > profile["start_speed"] and TUNING.speed_at(640.0, id) < float(profile["start_speed"]) * 1.02, id + " starts with a small gain across the first ten metres")
+		check(absf(TUNING.run_speed_at(64000.0, 39.999, id) - TUNING.min_speed_at(64000.0, id)) < 0.01, id + " dusk joins the local night curve continuously")
+		check(absf(TUNING.run_speed_at(64000.0, 60.001, id) - TUNING.min_speed_at(64000.0, id)) < 0.01, id + " dawn begins continuously")
 		previous_start = profile["start_speed"]
-		previous_cap = profile["max_speed"]
+		previous_late = late_speed
 		previous_xp = profile["xp_multiplier"]
 	var mutable: Dictionary = TUNING.profile_for("jungle")
-	mutable["max_speed"] = 99999.0
-	check(TUNING.profile_for("jungle")["max_speed"] == 1700.0, "Profile callers cannot mutate shared tuning")
+	mutable["start_speed"] = 99999.0
+	check(TUNING.profile_for("jungle")["start_speed"] == 800.0, "Profile callers cannot mutate shared tuning")
 	check(TUNING.profile_for("unknown") == TUNING.profile_for("jungle"), "Unknown profiles use a safe Easy fallback")
 	check(TUNING.speed_at(1234.0) == TUNING.speed_at(1234.0, "jungle"), "Legacy speed signature remains valid")
 	check(TUNING.run_speed_at(1234.0, 12.0) == TUNING.run_speed_at(1234.0, 12.0, "jungle"), "Legacy run-speed signature remains valid")

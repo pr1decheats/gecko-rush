@@ -10,7 +10,7 @@ const JUMP_DURATION: float = RushTuning.JUMP_DURATION
 const JUMP_ARC: float = RushTuning.JUMP_ARC
 const PIXELS_PER_METRE: float = RushTuning.PIXELS_PER_METRE
 const PLAYER_RADIUS: float = 20.0
-const RESUME_SCHEMA: int = 5
+const RESUME_SCHEMA: int = 6
 const CENTER_WALL_LEFT := RushTuning.CENTER_WALL_LEFT
 const CENTER_WALL_RIGHT := RushTuning.CENTER_WALL_RIGHT
 
@@ -53,6 +53,7 @@ var center_will_appear: bool = false
 var center_origin_side: int = -1
 var center_entry_x: float = LEFT_X
 var center_lane_x: float = CENTER_WALL_LEFT - 26.0
+var center_next_allowed_time: float = 0.0
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
@@ -172,6 +173,8 @@ func _physics_process(delta: float) -> void:
 		_store_resume()
 
 func _simulate_step(delta: float) -> void:
+	var previous_at := player_position()
+	var previous_time := run_time
 	run_time += delta
 	height_px += current_speed() * delta
 	if jump_elapsed >= 0.0:
@@ -196,11 +199,11 @@ func _simulate_step(delta: float) -> void:
 	gecko.position = at
 	gecko.run_speed_factor = current_speed() / RushTuning.START_SPEED
 	if not center_event in ["enter", "ride", "exit"]:
-		var contact: String = course.collision_kind_at(at, run_time, PLAYER_RADIUS)
+		var contact: String = course.collision_kind_along(previous_at, at, previous_time, run_time, PLAYER_RADIUS)
 		if not contact.is_empty():
 			_die(contact)
 			return
-	var picked: int = course.collect_at(at, run_time)
+	var picked: int = course.collect_along(previous_at, at)
 	if picked > 0:
 		run_coins += picked
 		Audio.play_sound("coin")
@@ -227,15 +230,46 @@ func _reset_center_event() -> void:
 	center_origin_side = -1
 	center_entry_x = LEFT_X
 	center_lane_x = CENTER_WALL_LEFT - 26.0
+	center_next_allowed_time = 0.0
 	center_wall.reset_visual()
 	environment.side_walls_visibility = 1.0
 
+func _center_event_allowed() -> bool:
+	# The complete preview/ride/return must fit in full daylight. Night and
+	# dusk/dawn get neither a wall nor a translucent preview.
+	if run_time < center_next_allowed_time or RushTuning.night_amount(run_time) > 0.001:
+		return false
+	var phase := fposmod(maxf(run_time, 0.0), RushTuning.CYCLE_SECONDS)
+	var duration := RushTuning.CENTER_PREVIEW_SECONDS + RushTuning.CENTER_ENTER_SECONDS + RushTuning.CENTER_RIDE_SECONDS + RushTuning.CENTER_EXIT_SECONDS
+	return phase + duration + 0.25 <= RushTuning.DAY_SECONDS - RushTuning.CYCLE_FADE_SECONDS
+
+func _cancel_center_for_night() -> void:
+	if center_event in ["enter", "ride", "exit"]:
+		side = center_origin_side
+		from_side = side
+		target_side = -side
+		jump_elapsed = -1.0
+		gecko.side = side
+		gecko.mode = "run"
+	center_event = "off"
+	center_elapsed = 0.0
+	center_will_appear = false
+	center_wall.reset_visual()
+	environment.side_walls_visibility = 1.0
+	gecko.position = player_position()
+
 func _begin_center_event() -> void:
 	var event_number := maxi(1, roundi(next_center_metres / RushTuning.CENTER_EVERY_METRES))
+	# Fast climbs may pass several milestones during one ride. Consume those
+	# milestones together, rather than chaining invulnerable rides afterward.
+	next_center_metres = maxf(next_center_metres + RushTuning.CENTER_EVERY_METRES, (floorf(max_height_px / PIXELS_PER_METRE / RushTuning.CENTER_EVERY_METRES) + 1.0) * RushTuning.CENTER_EVERY_METRES)
+	if not _center_event_allowed():
+		center_will_appear = false
+		return
+	center_next_allowed_time = run_time + RushTuning.CYCLE_SECONDS
 	var event_rng := RandomNumberGenerator.new()
 	event_rng.seed = run_seed + event_number * 104729
 	center_will_appear = event_rng.randf() < 0.5
-	next_center_metres += RushTuning.CENTER_EVERY_METRES
 	center_event = "preview"
 	center_elapsed = 0.0
 	if center_will_appear:
@@ -245,9 +279,14 @@ func _begin_center_event() -> void:
 		var duration := RushTuning.CENTER_PREVIEW_SECONDS + RushTuning.CENTER_ENTER_SECONDS + RushTuning.CENTER_RIDE_SECONDS + RushTuning.CENTER_EXIT_SECONDS + 0.65
 		for step in range(ceili(duration * 60.0)):
 			predicted_height += RushTuning.run_speed_at(predicted_height, run_time + float(step) / 60.0, world_id) / 60.0
-		course.begin_safe_section(max_height_px - 900.0, predicted_height + 350.0)
+		var entry_margin := maxf(900.0, RushTuning.max_speed_at(max_height_px, world_id) * 0.25)
+		var return_margin := maxf(350.0, RushTuning.max_speed_at(predicted_height, world_id) * 0.45)
+		course.begin_safe_section(max_height_px - entry_margin, predicted_height + return_margin)
 
 func _tick_center_event(delta: float) -> void:
+	if center_event != "off" and RushTuning.night_amount(run_time) > 0.001:
+		_cancel_center_for_night()
+		return
 	if center_event == "off":
 		if max_height_px / PIXELS_PER_METRE >= next_center_metres:
 			_begin_center_event()
@@ -544,7 +583,8 @@ func _store_resume() -> void:
 		"coins": run_coins, "jumps": run_jumps, "passed": run_passed,
 		"camera_height": camera_height, "record_announced": record_announced,
 		"center": {"next_metres": next_center_metres, "event": center_event, "elapsed": center_elapsed,
-			"will_appear": center_will_appear, "origin_side": center_origin_side, "entry_x": center_entry_x, "lane_x": center_lane_x},
+			"will_appear": center_will_appear, "origin_side": center_origin_side, "entry_x": center_entry_x, "lane_x": center_lane_x,
+			"next_allowed_time": center_next_allowed_time},
 		"course": course.snapshot()
 	})
 
@@ -577,6 +617,7 @@ func _restore_run() -> void:
 		center_event = "off"
 	center_elapsed = clampf(float(saved_center.get("elapsed", 0.0)), 0.0, RushTuning.CENTER_RIDE_SECONDS)
 	center_will_appear = bool(saved_center.get("will_appear", false))
+	center_next_allowed_time = maxf(0.0, float(saved_center.get("next_allowed_time", 0.0)))
 	center_origin_side = -1 if int(saved_center.get("origin_side", -1)) < 0 else 1
 	center_entry_x = clampf(float(saved_center.get("entry_x", LEFT_X)), LEFT_X, RIGHT_X)
 	center_lane_x = CENTER_WALL_LEFT - 26.0 if center_origin_side == -1 else CENTER_WALL_RIGHT + 26.0
@@ -596,6 +637,8 @@ func _restore_run() -> void:
 		gecko.jump_progress = clampf(center_elapsed / (RushTuning.CENTER_ENTER_SECONDS if center_event == "enter" else RushTuning.CENTER_EXIT_SECONDS), 0.0, 1.0)
 	gecko.run_speed_factor = current_speed() / RushTuning.START_SPEED
 	gecko.position = player_position()
+	if center_event != "off" and RushTuning.night_amount(run_time) > 0.001:
+		_cancel_center_for_night()
 	effects.clear()
 	state = State.PAUSED
 	_update_center_visual(RushTuning.night_amount(run_time))

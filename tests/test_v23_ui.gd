@@ -1,5 +1,5 @@
 extends SceneTree
-## Difficulty names, unlock/XP explanations and portrait layout in both locales.
+## Compact biome selectors and portrait layout in the original two locales.
 ## Optional native captures: -- --capture /absolute/output/path
 var checks := 0
 var failures := 0
@@ -90,20 +90,12 @@ func _run() -> void:
 			check(cards != null and cards.get_child_count() == 3, language + " " + scenario + ": three distance cards remain")
 			var actions: Control = ui._content.find_child("MenuActions", true, false)
 			check(cards.get_global_rect().end.y + 20.0 < actions.get_global_rect().position.y, language + " " + scenario + ": summary clears play/navigation buttons")
-			var difficulty: Button = ui._content.find_child("MenuDifficulty", true, false)
-			check(difficulty.text.begins_with(locale.text(str(p.current_world().name).to_upper())), language + ": difficulty is the primary menu name")
+			var world_button: Button = ui._content.find_child("MenuWorld", true, false)
+			check(world_button.text.begins_with(locale.text(str(p.current_world().get("world_name", p.current_world().theme_name))).to_upper()), language + ": biome is the primary menu name")
 			var summary: Node = ui._content.find_child("MenuWorldInfo", true, false)
-			var summary_text := ""
-			for label: Label in _labels(summary):
-				summary_text += label.text + "\n"
-			check(summary_text.contains("0,55" if language == "ru" else "0.55"), language + ": XP multiplier follows locale decimal format")
-			check(summary_text.contains("300" if scenario != "veteran" else ("Безумие" if language == "ru" else "Insane")), language + " " + scenario + ": next difficulty goal is visible")
-			if scenario != "new":
-				check(summary_text.contains(locale.text("Тренировка · XP за забег: 0")), language + ": capped world clearly states zero run XP")
-			if scenario == "practice":
-				check(summary_text.contains("225 / 300"), language + ": next unlock shows previous single-run progress")
-			if language == "en":
-				check(cyrillic.search(summary_text) == null, "English dynamic menu explanation contains no untranslated Russian")
+			check(summary == null, language + " " + scenario + ": menu XP/requirements component is absent")
+			for label: Label in _labels(ui._content):
+				check(not label.text.contains("XP"), language + ": menu contains no XP text")
 			await _capture("menu_" + language + "_" + scenario)
 			ui.show_panel("profile")
 			await _settle()
@@ -112,6 +104,9 @@ func _run() -> void:
 				check(card != null, "selector includes " + str(world.id))
 				var button: Button = card.find_child("Select_" + str(world.id), true, false)
 				check(button.disabled == not p.is_world_unlocked(str(world.id)), "selector reflects unlock status: " + str(world.id))
+				check(_labels(card).size() == 2, "selector contains only world and difficulty labels: " + str(world.id))
+				check(card.find_child("WorldTitle", true, false).text == locale.text(str(world.get("world_name", world.theme_name))), "selector title names the biome: " + str(world.id))
+				check(card.find_child("WorldDifficulty", true, false).text == locale.text(str(world.name)), "selector shows difficulty as secondary label: " + str(world.id))
 				for label: Label in _labels(card):
 					check(label.get_global_rect().end.x <= card.get_global_rect().end.x + 1.0, "wrapped card label stays within width: " + label.text)
 					check(label.get_global_rect().end.y <= card.get_global_rect().end.y + 1.0, "wrapped card label stays within height: " + label.text)

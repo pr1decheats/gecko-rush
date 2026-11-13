@@ -329,7 +329,7 @@ def compare_android(entries, apk_path, expected_sha256, version):
             "compiled_scripts_identical": len(scripts)}
 
 
-def verify(ipa_path, apk_path, apk_sha256, version="2.3.0", build="5"):
+def verify(ipa_path, apk_path, apk_sha256, version="2.4.0", build="6"):
     require(ipa_path.is_file(), f"Actual IPA not found: {ipa_path}")
     with zipfile.ZipFile(ipa_path) as archive:
         members, root = inspect_archive(archive)
@@ -378,8 +378,8 @@ def main():
     parser.add_argument("--ipa", type=Path, required=True)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--apk-sha256", required=True, help="SHA-256 of the frozen signed APK")
-    parser.add_argument("--version", default="2.3.0")
-    parser.add_argument("--build", default="5")
+    parser.add_argument("--version", default="2.4.0")
+    parser.add_argument("--build", default="6")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-fA-F]{64}", args.apk_sha256):
         parser.error("--apk-sha256 must contain exactly 64 hexadecimal characters")
