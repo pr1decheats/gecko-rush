@@ -61,28 +61,15 @@ jobs:
           if ($text -notmatch 'Godot Engine v4\.6\.3' -or $text -match '(?m)^(ERROR:|SCRIPT ERROR:)') {
             throw 'Native startup log is missing or contains an engine/script error'
           }
-          $runtimeLog = Join-Path $env:WINDOWS_OUTPUT 'exported-runtime.log'
-          $runtimeScript = (Join-Path $env:GITHUB_WORKSPACE '.github/check_release_runtime.gd').Replace('\', '/')
-          $appRoot = (Join-Path $env:WINDOWS_OUTPUT 'app').Replace('\', '/')
-          $packPath = $exe.Replace('\', '/')
-          $runtime = Start-Process -FilePath $exe -ArgumentList @('--headless', '--audio-driver', 'Dummy', '--main-pack', $packPath, '--path', $appRoot, '--fixed-fps', '60', '--quit-after', '600', '--script', $runtimeScript, '--log-file', $runtimeLog) -PassThru
-          if (-not $runtime.WaitForExit(60000)) {
-            $runtime.Kill()
-            if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Raw | Write-Output }
-            throw 'Exported character runtime check timed out'
-          }
-          $runtime.Refresh()
-          $runtimeText = Get-Content -LiteralPath $runtimeLog -Raw
-          $runtimeText | Write-Output
-          if ($runtime.ExitCode -ne 0 -or $runtimeText -notmatch 'RELEASE_RUNTIME: 67 checks, 0 failures' -or $runtimeText -match '(?m)^(ERROR:|SCRIPT ERROR:)') {
-            throw 'Exported illustrations or desktop 240 FPS policy failed on Windows'
-          }
+          # Official release templates disable path overrides, so --script is
+          # intentionally ignored and --main-pack is rejected by Godot itself.
+          # The exact exported pack's 67 resource/FPS checks run separately
+          # under the editor on Linux; this job executes the real release EXE.
           $package = Get-Content "$env:WINDOWS_OUTPUT/windows-package-verification.json" -Raw | ConvertFrom-Json
           $report = @{
             result = 'PASS'; source_commit = $env:GITHUB_SHA; run_id = $env:GITHUB_RUN_ID;
             package = $package; native_windows = @{
               exit_code = 0; mode = 'headless'; frames = 360; simulation_seconds = 6;
-              exported_runtime_checks = 67; illustrated_characters = 21; illustrated_poses = 42; desktop_fps_cap_applied = 240;
               platform = [System.Environment]::OSVersion.VersionString;
               limit = 'Native Windows startup/menu logic checked; GPU rendering and actual display FPS were not measured.'
             }
@@ -104,7 +91,6 @@ jobs:
             ${{ env.WINDOWS_OUTPUT }}/windows-native-verification.json
             ${{ env.WINDOWS_OUTPUT }}/Windows-SHA256SUMS.txt
             ${{ env.WINDOWS_OUTPUT }}/native-windows.log
-            ${{ env.WINDOWS_OUTPUT }}/exported-runtime.log
 
       - name: Add Windows files to the existing 2.6 release
         env:
