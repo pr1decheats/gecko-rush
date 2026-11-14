@@ -90,7 +90,7 @@ func _check_world_cards(language: String) -> void:
 		check(card != null, language + ": selector includes biome " + id)
 		var labels := _labels(card)
 		var buttons := _buttons(card)
-		check(labels.size() == 2 and buttons.size() == 1, language + ": world card has only biome, difficulty and status/control: " + id)
+		check(labels.size() in [3, 4] and buttons.size() == 1, language + ": world card has biome, difficulty, unlock level and compact locked requirement: " + id)
 		check(card.find_child("WorldTitle", true, false).text == _world_title(world), language + ": biome is primary: " + id)
 		check(card.find_child("WorldDifficulty", true, false).text == locale.text(str(world.name)), language + ": difficulty is secondary: " + id)
 		check(not _has_progress_bar(card), language + ": world card has no unlock progress panel: " + id)
@@ -98,7 +98,7 @@ func _check_world_cards(language: String) -> void:
 		var selected := str(p.data.selected_world) == id
 		check(buttons[0].disabled == not unlocked, language + ": compact card still respects the backend gate: " + id)
 		check(buttons[0].text == locale.text("ВЫБРАН" if selected else ("ВЫБРАТЬ" if unlocked else "ЗАКРЫТО")), language + ": selection/locked status stays concise: " + id)
-		check(card.size.y <= 270.0, language + ": world card stays compact in portrait: " + id)
+		check(card.size.y <= 350.0, language + ": world card stays compact in portrait: " + id)
 		for label: Label in labels:
 			check(not label.text.contains("XP") and not label.text.contains("×"), language + ": no XP/pace/requirement text in world card: " + id)
 			check(label.get_global_rect().end.x <= card.get_global_rect().end.x + 1.0 and label.get_global_rect().end.y <= card.get_global_rect().end.y + 1.0, language + ": wrapped title/difficulty stays in card: " + id)
@@ -205,7 +205,7 @@ func _run() -> void:
 		var graphic_text: Array[String] = []
 		for button: Button in _buttons(ui._content):
 			graphic_text.append(button.text)
-		check(graphic_text.has(locale.text("60 Гц")) and graphic_text.has(locale.text("120 Гц")) and graphic_text.has(locale.text("Тёмная")) and graphic_text.has(locale.text("Светлая")), language + ": frame-rate and appearance controls remain")
+		check(graphic_text.has(locale.format_text("%d FPS", [60])) and graphic_text.has(locale.format_text("%d FPS", [120])) and graphic_text.has(locale.text("Тёмная")) and graphic_text.has(locale.text("Светлая")), language + ": frame-rate and appearance controls remain")
 	game.queue_free()
 	await process_frame
 	for suffix: String in ["", ".bak", ".tmp"]:

@@ -20,11 +20,12 @@ func _initialize() -> void:
 		return
 	var options := windows + ".options"
 	var version := str(ProjectSettings.get_setting("application/config/version"))
+	var build := str(config.get_value("preset.0.options", "version/code", 8))
 	config.set_value(windows, "name", "Windows")
 	config.set_value(options, "binary_format/architecture", "x86_64")
 	config.set_value(options, "binary_format/embed_pck", true)
 	config.set_value(options, "application/modify_resources", true)
-	config.set_value(options, "application/file_version", version + ".7")
+	config.set_value(options, "application/file_version", version + "." + build)
 	config.set_value(options, "application/product_version", version + ".0")
 	config.set_value(options, "application/product_name", "Gecko Rush")
 	config.set_value(options, "application/file_description", "Gecko Rush")
@@ -34,5 +35,5 @@ func _initialize() -> void:
 	if config.save("res://export_presets.cfg") != OK:
 		quit(1)
 		return
-	print("Prepared Windows x64: embedded game, native icon and version " + version + ".7")
+	print("Prepared Windows x64: embedded game, native icon and version " + version + "." + build)
 	quit(0)

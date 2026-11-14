@@ -19,6 +19,8 @@ const VALIDATION_RADIUS := 30.0
 const SPIKE_REACH := 84.0
 const ICICLE_RADIUS := 21.0
 const ICICLE_HALF_LENGTH := 34.0
+const FROST_RADIUS := 26.0
+const FROST_HALF_LENGTH := 44.0
 const STREAM_AHEAD_SECONDS := 3.0
 const KEEP_BEHIND_SECONDS := 0.8
 const PHYSICS_STEP := 1.0 / 120.0
@@ -286,25 +288,25 @@ func _generate_cell() -> void:
 					column["x"] = 445.0 if index == 0 else 635.0
 					column["phase"] = float(index) * PI
 					candidates.append(column)
-			8: # A diagonal shard / frost / gust relay, not wall spikes.
+			8: # One readable shard / frost / gust instead of two tiny relays.
 				var kind := "frost" if world_id == "ice" else ("shard" if world_id == "crystal" else "wind_blade")
-				for index in range(2):
-					var relay := _central_hazard(kind, start)
-					_scale_hazard(relay, 0.64)
-					relay["x"] = 425.0 if index == 0 else 655.0
-					relay["angle"] = -0.35 if index == 0 else 0.35
-					candidates.append(relay)
+				var relay := _central_hazard(kind, start)
+				# The full motion envelope stays clear of both wall lanes.
+				# The old outer positions are unsafe for the enlarged body.
+				relay["x"] = 540.0
+				relay["angle"] = rng.randf_range(-0.35, 0.35)
+				candidates.append(relay)
 			9: # One readable, pulsing beam / vent / lightning strike.
 				var kind := "crystal_beam" if world_id == "crystal" else ("fire_jet" if world_id == "volcano" else "lightning")
 				candidates.append(_central_hazard(kind, start))
-			10: # The sky's charged orb and a small crosswind at different x.
+			10: # A charged orb and a readable crosswind at different x.
 				var orb := _central_hazard("storm_orb", start)
 				_scale_hazard(orb, 0.72)
 				orb["x"] = 430.0
 				candidates.append(orb)
 				var gust := _central_hazard("wind_blade", start)
-				_scale_hazard(gust, 0.62)
-				gust["x"] = 650.0
+				_scale_hazard(gust, 0.9)
+				gust["x"] = 640.0
 				candidates.append(gust)
 	if not breathing:
 		var primary_gate: Dictionary = {}
@@ -464,8 +466,8 @@ func _central_hazard(kind: String, start: float) -> Dictionary:
 			item["frequency"] = 0.65
 		"frost":
 			item["shape"] = "capsule"
-			item["r"] = 13.0
-			item["half_length"] = 38.0
+			item["r"] = FROST_RADIUS
+			item["half_length"] = FROST_HALF_LENGTH
 			item["motion_x"] = 54.0
 			item["motion_y"] = 9.0
 			item["frequency"] = 1.45
@@ -1063,7 +1065,10 @@ static func _silhouette_points(kind: String, radius: float, half_length: float =
 	if kind == "crystal_beam":
 		return PackedVector2Array([Vector2(-tip, 0), Vector2(-half_length, -radius), Vector2(half_length, -radius), Vector2(tip, 0), Vector2(half_length, radius), Vector2(-half_length, radius)])
 	if kind == "frost":
-		return PackedVector2Array([Vector2(-tip, 0), Vector2(-half_length, -radius * 0.45), Vector2(-half_length * 0.35, -radius * 0.45), Vector2(-half_length * 0.12, -radius), Vector2(half_length * 0.12, -radius), Vector2(half_length * 0.35, -radius * 0.45), Vector2(half_length, -radius * 0.45), Vector2(tip, 0), Vector2(half_length, radius * 0.45), Vector2(half_length * 0.35, radius * 0.45), Vector2(half_length * 0.12, radius), Vector2(-half_length * 0.12, radius), Vector2(-half_length * 0.35, radius * 0.45), Vector2(-half_length, radius * 0.45)])
+		# Keep the exact old 13/38 silhouette when restoring checkpoints;
+		# normalised x joints also make the thicker body's texture agree.
+		var shaft := tip * (38.0 / 51.0)
+		return PackedVector2Array([Vector2(-tip, 0), Vector2(-shaft, -radius * 0.45), Vector2(-shaft * 0.35, -radius * 0.45), Vector2(-shaft * 0.12, -radius), Vector2(shaft * 0.12, -radius), Vector2(shaft * 0.35, -radius * 0.45), Vector2(shaft, -radius * 0.45), Vector2(tip, 0), Vector2(shaft, radius * 0.45), Vector2(shaft * 0.35, radius * 0.45), Vector2(shaft * 0.12, radius), Vector2(-shaft * 0.12, radius), Vector2(-shaft * 0.35, radius * 0.45), Vector2(-shaft, radius * 0.45)])
 	if kind == "vine":
 		var points := PackedVector2Array([Vector2(-tip, 0)])
 		for index in range(7):
@@ -1093,7 +1098,7 @@ func _long_polygon_texture(kind: String) -> Texture2D:
 	match kind:
 		"icicle": ratio = ICICLE_HALF_LENGTH / ICICLE_RADIUS
 		"vine": ratio = 40.0 / 13.0
-		"frost": ratio = 38.0 / 13.0
+		"frost": ratio = FROST_HALF_LENGTH / FROST_RADIUS
 		"fire_jet": ratio = 42.0 / 13.0
 		"wind_blade": ratio = 42.0 / 12.0
 		"crystal_beam": ratio = 62.0 / 10.0
@@ -1109,7 +1114,7 @@ func _long_polygon_texture(kind: String) -> Texture2D:
 				if Geometry2D.get_closest_point_to_segment(point, points[index], points[(index + 1) % points.size()]).distance_squared_to(point) < 0.012:
 					edge = true
 					break
-			if edge: color = Color("24546e") if kind == "icicle" else base.darkened(0.6)
+			if edge: color = Color("173f5b") if kind == "frost" else (Color("24546e") if kind == "icicle" else base.darkened(0.6))
 			elif kind == "icicle":
 				# A bright inner face and a dark contour stay inside the same
 				# lethal silhouette; no glow makes empty space look dangerous.
@@ -1126,7 +1131,9 @@ func _long_polygon_texture(kind: String) -> Texture2D:
 				if absf(point.y + 0.4) < 0.15: color = Color("f2fff9")
 				else: color.a = 0.85
 			elif kind == "frost":
-				if x % 13 < 2 or absf(point.y) < 0.12: color = Color("eaffff")
+				# Bright face/dark outline stay inside the exact lethal polygon.
+				color = Color("b8eafa") if point.y > 0.0 else Color("dffaff")
+				if absf(point.y) < 0.18 or x % 19 < 3: color = Color("f7ffff")
 			elif kind == "crystal_beam":
 				if absf(point.y) < 0.16: color = Color("fff4ff")
 				elif (x / 16) % 2 == 0: color = base.lightened(0.3)

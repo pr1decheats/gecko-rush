@@ -159,7 +159,7 @@ func _test_result_attribution() -> void:
 	check(game.last_result.world_id == "ice" and p.data.last_result.world_id == "ice", "death result belongs to the running world rather than current menu choice")
 	check(p.data.world_stats.ice.runs == 1 and p.data.world_stats.ice.best_height == 320.0, "real death credits that world's run and record")
 	check(p.world_run_distances("sky").best == 0.0 and p.data.selected_world == "sky", "settlement preserves independent menu choice and unplayed world statistics")
-	check(game.last_result.xp == 61 and p.data.world_stats.ice.xp == 61, "result XP uses Hard's multiplier and first-jump award")
+	check(game.last_result.xp == 72 and p.data.world_stats.ice.xp == 72, "result XP includes the modest run boost, Hard multiplier and first-jump award")
 	var settled := JSON.stringify(p.data, "", false, true)
 	game._die("impact")
 	check(JSON.stringify(p.data, "", false, true) == settled, "duplicate death cannot change any settled counter")
@@ -213,6 +213,7 @@ func _test_resume_roundtrips() -> void:
 			check(game.run_coins == 4 and game.run_passed == 8 and game.run_jumps == 2, "checkpoint retains temporary counters: " + id)
 			check(_canonical(game.course.snapshot()) == _canonical(saved.course), "complete course and protected intervals roundtrip deterministically: " + id)
 			game._continue_run()
+			game._process(3.0) # Resume countdown must finish before driving the run.
 			for step: int in range(32):
 				game._simulate_step(STEP)
 			check(game.state == game.State.RUNNING and game.side == 1 and game.jump_elapsed < 0.0 and game.run_jumps == 3, "restored flight lands once and continues in the saved world: " + id)
@@ -227,14 +228,14 @@ func _test_old_checkpoint_settlement() -> void:
 	check(game.state == game.State.MENU and p.load_resume().is_empty(), "schema4 checkpoint is settled and closed before showing the new menu")
 	check(p.data.runs == 1 and p.data.last_result.world_id == "volcano", "old checkpoint closes in its saved world exactly once")
 	check(p.data.world_stats.volcano.best_height == 900.0 and p.data.world_stats.volcano.total_distance == 900.0 and p.data.world_stats.volcano.jumps == 9, "old checkpoint metres and counters are credited without conversion loss")
-	check(p.data.xp == 179 and p.data.coins == 16, "old checkpoint uses its world multiplier, record/height reward and one level bonus")
+	check(p.data.xp == 220 and p.data.coins == 17, "old checkpoint gets the current run boost, world multiplier and two earned level bonuses")
 	check(p.world_run_distances("jungle").best == 0.0 and p.data.selected_world == "jungle", "legacy settlement preserves current world selection and unrelated records")
 	var settled := JSON.stringify(p.data, "", false, true)
 	game._show_menu()
 	game._cash_out_saved_run()
 	check(JSON.stringify(p.data, "", false, true) == settled, "reopening menu cannot settle old checkpoint twice")
 	p.load_game()
-	check(p.data.runs == 1 and p.data.coins == 16 and p.data.world_stats.volcano.runs == 1 and p.load_resume().is_empty(), "once-only legacy settlement survives a disk reload")
+	check(p.data.runs == 1 and p.data.coins == 17 and p.data.world_stats.volcano.runs == 1 and p.load_resume().is_empty(), "once-only legacy settlement survives a disk reload")
 
 func _test_input_and_animation() -> void:
 	_fresh()
@@ -282,10 +283,11 @@ func _test_input_and_animation() -> void:
 	check(not game.gecko.is_processing() and not game.environment.is_processing() and game.gecko._clock == animation_clock and not game.effects.enabled, "pause also freezes body animation, scenery and effects")
 	check(p.load_resume().world_id == "sky", "pause checkpoints the actual selected difficulty")
 	game._unhandled_input(_key(KEY_P))
-	check(game.state == game.State.RUNNING and game.jump_elapsed == saved_flight, "P resumes the same flight without another jump")
+	check(game.state == game.State.RESUMING and game.jump_elapsed == saved_flight, "P starts the guarded countdown without changing the paused flight")
+	game._process(3.0)
 	for step: int in range(32):
 		game._simulate_step(STEP)
-	check(game.side == 1 and game.run_jumps == 1, "single resumed input flight lands and counts exactly once")
+	check(game.state == game.State.RUNNING and game.side == 1 and game.run_jumps == 1, "single resumed input flight lands and counts exactly once after countdown")
 	game._start_run(true)
 	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 	check(game.state == game.State.PAUSED and game.height_px == 120.0 and p.load_resume().world_id == "sky", "backgrounding during launch creates a safe resumable checkpoint in the selected world")

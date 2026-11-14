@@ -1,0 +1,1053 @@
+{
+  "version": 1,
+  "skins": {
+    "standard_green": {
+      "run": {
+        "texture": "res://assets/characters/standard-atlas.png",
+        "rect": [
+          240,
+          15,
+          482,
+          856
+        ],
+        "eye": [
+          0.62,
+          0.15,
+          0.17,
+          0.1
+        ],
+        "mouth": [
+          0.84,
+          0.3
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "display_size": [
+          115.4322,
+          205.0
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/standard-atlas.png",
+        "rect": [
+          961,
+          192,
+          686,
+          556
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "display_size": [
+          138.1871,
+          112.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "neon_pulse": {
+      "run": {
+        "texture": "res://assets/characters/catalog-a-run.png",
+        "rect": [
+          87,
+          25,
+          373,
+          670
+        ],
+        "eye": [
+          0.67828418230563,
+          0.16865671641791044,
+          0.13672922252010725,
+          0.0791044776119403
+        ],
+        "display_size": [
+          114.1269,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.77828418230563,
+          0.28865671641791046
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-a-sleep.png",
+        "rect": [
+          97,
+          186,
+          378,
+          347
+        ],
+        "display_size": [
+          122.0058,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "desert_wanderer": {
+      "run": {
+        "texture": "res://assets/characters/catalog-a-run.png",
+        "rect": [
+          600,
+          28,
+          448,
+          667
+        ],
+        "eye": [
+          0.5089285714285714,
+          0.17841079460269865,
+          0.12946428571428573,
+          0.07646176911544228
+        ],
+        "display_size": [
+          137.6912,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.6089285714285714,
+          0.29841079460269865
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-a-sleep.png",
+        "rect": [
+          627,
+          182,
+          381,
+          346
+        ],
+        "display_size": [
+          123.3295,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "shadow_jumper": {
+      "run": {
+        "texture": "res://assets/characters/catalog-a-run.png",
+        "rect": [
+          1140,
+          31,
+          454,
+          664
+        ],
+        "eye": [
+          0.5022026431718062,
+          0.1746987951807229,
+          0.1145374449339207,
+          0.07228915662650602
+        ],
+        "display_size": [
+          140.1657,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.6022026431718062,
+          0.2946987951807229
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-a-sleep.png",
+        "rect": [
+          1168,
+          177,
+          379,
+          352
+        ],
+        "display_size": [
+          120.5909,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "cosmo_gecko": {
+      "run": {
+        "texture": "res://assets/characters/catalog-a-run.png",
+        "rect": [
+          1684,
+          36,
+          420,
+          658
+        ],
+        "eye": [
+          0.5619047619047619,
+          0.1474164133738602,
+          0.13333333333333333,
+          0.08206686930091185
+        ],
+        "display_size": [
+          130.8511,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.6619047619047619,
+          0.2674164133738602
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-a-sleep.png",
+        "rect": [
+          1714,
+          189,
+          371,
+          344
+        ],
+        "display_size": [
+          120.7907,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "jungle_hunter": {
+      "run": {
+        "texture": "res://assets/characters/catalog-b-run.png",
+        "rect": [
+          71,
+          0,
+          432,
+          703
+        ],
+        "eye": [
+          0.57639,
+          0.17923,
+          0.07407,
+          0.06117
+        ],
+        "anchor": [
+          0.59954,
+          0.5192
+        ],
+        "mouth": [
+          0.4163899999999999,
+          0.28423
+        ],
+        "display_size": [
+          125.9744,
+          205.0
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-b-sleep.png",
+        "rect": [
+          16,
+          138,
+          526,
+          451
+        ],
+        "display_size": [
+          130.6253,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "pirate_captain": {
+      "run": {
+        "texture": "res://assets/characters/catalog-b-run.png",
+        "rect": [
+          617,
+          0,
+          436,
+          705
+        ],
+        "eye": [
+          0.39908,
+          0.17021,
+          0.05275,
+          0.04965
+        ],
+        "anchor": [
+          0.5344,
+          0.49645
+        ],
+        "mouth": [
+          0.23908,
+          0.27521
+        ],
+        "display_size": [
+          126.7801,
+          205.0
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-b-sleep.png",
+        "rect": [
+          543,
+          141,
+          550,
+          452
+        ],
+        "display_size": [
+          136.2832,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "robo_gecko": {
+      "run": {
+        "texture": "res://assets/characters/catalog-b-run.png",
+        "rect": [
+          1156,
+          28,
+          370,
+          675
+        ],
+        "eye": [
+          0.64595,
+          0.16148,
+          0.10541,
+          0.07111
+        ],
+        "anchor": [
+          0.6,
+          0.48444
+        ],
+        "mouth": [
+          0.48595,
+          0.26648
+        ],
+        "display_size": [
+          112.3704,
+          205.0
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-b-sleep.png",
+        "rect": [
+          1112,
+          187,
+          514,
+          402
+        ],
+        "display_size": [
+          143.204,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "electro_shock": {
+      "run": {
+        "texture": "res://assets/characters/catalog-b-run.png",
+        "rect": [
+          1682,
+          1,
+          424,
+          702
+        ],
+        "eye": [
+          0.40094,
+          0.19658,
+          0.07547,
+          0.05983
+        ],
+        "anchor": [
+          0.44575,
+          0.49715
+        ],
+        "mouth": [
+          0.24094000000000002,
+          0.30158
+        ],
+        "display_size": [
+          123.8177,
+          205.0
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-b-sleep.png",
+        "rect": [
+          1632,
+          147,
+          532,
+          448
+        ],
+        "display_size": [
+          133.0,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "royal_pearl": {
+      "run": {
+        "texture": "res://assets/characters/catalog-c-run.png",
+        "rect": [
+          62,
+          100,
+          388,
+          640
+        ],
+        "eye": [
+          0.49227,
+          0.16875,
+          0.10825,
+          0.08125
+        ],
+        "anchor": [
+          0.48454,
+          0.45312
+        ],
+        "display_size": [
+          124.2812,
+          205.0
+        ],
+        "mouth": [
+          0.59227,
+          0.28875
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-c-sleep.png",
+        "rect": [
+          58,
+          157,
+          459,
+          424
+        ],
+        "display_size": [
+          121.2453,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "cyber_ninja": {
+      "run": {
+        "texture": "res://assets/characters/catalog-c-run.png",
+        "rect": [
+          484,
+          130,
+          383,
+          610
+        ],
+        "eye": [
+          0.42559,
+          0.12295,
+          0.10705,
+          0.06885
+        ],
+        "anchor": [
+          0.53786,
+          0.41803
+        ],
+        "display_size": [
+          128.7131,
+          205.0
+        ],
+        "mouth": [
+          0.52559,
+          0.24295
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-c-sleep.png",
+        "rect": [
+          598,
+          209,
+          441,
+          375
+        ],
+        "display_size": [
+          131.712,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "rainbow_spark": {
+      "run": {
+        "texture": "res://assets/characters/catalog-c-run.png",
+        "rect": [
+          924,
+          138,
+          358,
+          602
+        ],
+        "eye": [
+          0.5419,
+          0.10963,
+          0.12291,
+          0.0897
+        ],
+        "anchor": [
+          0.6257,
+          0.4186
+        ],
+        "display_size": [
+          121.9103,
+          205.0
+        ],
+        "mouth": [
+          0.6419,
+          0.22963
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-c-sleep.png",
+        "rect": [
+          1117,
+          182,
+          466,
+          392
+        ],
+        "display_size": [
+          133.1429,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "moon_ghost": {
+      "run": {
+        "texture": "res://assets/characters/catalog-c-run.png",
+        "rect": [
+          1362,
+          134,
+          379,
+          611
+        ],
+        "eye": [
+          0.45383,
+          0.11948,
+          0.11609,
+          0.08838
+        ],
+        "anchor": [
+          0.58047,
+          0.41899
+        ],
+        "display_size": [
+          127.1604,
+          205.0
+        ],
+        "mouth": [
+          0.55383,
+          0.23948
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-c-sleep.png",
+        "rect": [
+          1669,
+          175,
+          475,
+          411
+        ],
+        "display_size": [
+          129.4404,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "golden_champion": {
+      "run": {
+        "texture": "res://assets/characters/catalog-d-run.png",
+        "rect": [
+          147,
+          134,
+          271,
+          435
+        ],
+        "eye": [
+          0.627,
+          0.23,
+          0.11,
+          0.075
+        ],
+        "display_size": [
+          127.7126,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.727,
+          0.35
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-d-sleep.png",
+        "rect": [
+          80,
+          190,
+          393,
+          370
+        ],
+        "display_size": [
+          118.9622,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "volcanic_fighter": {
+      "run": {
+        "texture": "res://assets/characters/catalog-d-run.png",
+        "rect": [
+          681,
+          146,
+          290,
+          424
+        ],
+        "eye": [
+          0.579,
+          0.208,
+          0.11,
+          0.075
+        ],
+        "display_size": [
+          140.2123,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.6789999999999999,
+          0.32799999999999996
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-d-sleep.png",
+        "rect": [
+          621,
+          197,
+          388,
+          363
+        ],
+        "display_size": [
+          119.7135,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "pixel_gecko": {
+      "run": {
+        "texture": "res://assets/characters/catalog-d-run.png",
+        "rect": [
+          1229,
+          167,
+          254,
+          398
+        ],
+        "eye": [
+          0.606,
+          0.168,
+          0.11,
+          0.075
+        ],
+        "display_size": [
+          130.8291,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.706,
+          0.28800000000000003
+        ],
+        "filter": "nearest"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-d-sleep.png",
+        "rect": [
+          1171,
+          227,
+          380,
+          322
+        ],
+        "display_size": [
+          132.1739,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "nearest"
+      }
+    },
+    "frost_crystal": {
+      "run": {
+        "texture": "res://assets/characters/catalog-d-run.png",
+        "rect": [
+          1762,
+          136,
+          288,
+          435
+        ],
+        "eye": [
+          0.604,
+          0.225,
+          0.11,
+          0.075
+        ],
+        "display_size": [
+          135.7241,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "mouth": [
+          0.704,
+          0.345
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-d-sleep.png",
+        "rect": [
+          1705,
+          173,
+          397,
+          388
+        ],
+        "display_size": [
+          114.5979,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "venom_chameleon": {
+      "run": {
+        "texture": "res://assets/characters/catalog-e-run.png",
+        "rect": [
+          196,
+          144,
+          256,
+          470
+        ],
+        "eye": [
+          0.635,
+          0.165,
+          0.125,
+          0.076
+        ],
+        "mouth": [
+          0.36,
+          0.265
+        ],
+        "display_size": [
+          111.6596,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-e-sleep.png",
+        "rect": [
+          111,
+          196,
+          342,
+          336
+        ],
+        "eye": [
+          0.28,
+          0.32,
+          0.12,
+          0.09
+        ],
+        "mouth": [
+          0.22,
+          0.55
+        ],
+        "display_size": [
+          114.0,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "star_wanderer": {
+      "run": {
+        "texture": "res://assets/characters/catalog-e-run.png",
+        "rect": [
+          699,
+          173,
+          228,
+          441
+        ],
+        "eye": [
+          0.72,
+          0.125,
+          0.138,
+          0.083
+        ],
+        "mouth": [
+          0.46,
+          0.225
+        ],
+        "display_size": [
+          105.9864,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-e-sleep.png",
+        "rect": [
+          650,
+          196,
+          322,
+          335
+        ],
+        "eye": [
+          0.28,
+          0.32,
+          0.12,
+          0.09
+        ],
+        "mouth": [
+          0.22,
+          0.55
+        ],
+        "display_size": [
+          107.6537,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "steel_knight": {
+      "run": {
+        "texture": "res://assets/characters/catalog-e-run.png",
+        "rect": [
+          1193,
+          129,
+          307,
+          485
+        ],
+        "eye": [
+          0.515,
+          0.2,
+          0.1,
+          0.075
+        ],
+        "mouth": [
+          0.32,
+          0.3
+        ],
+        "display_size": [
+          129.7629,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-e-sleep.png",
+        "rect": [
+          1161,
+          161,
+          379,
+          368
+        ],
+        "eye": [
+          0.28,
+          0.32,
+          0.12,
+          0.09
+        ],
+        "mouth": [
+          0.22,
+          0.55
+        ],
+        "display_size": [
+          115.3478,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    },
+    "ghost_dragon": {
+      "run": {
+        "texture": "res://assets/characters/catalog-e-run.png",
+        "rect": [
+          1704,
+          135,
+          288,
+          479
+        ],
+        "eye": [
+          0.515,
+          0.195,
+          0.117,
+          0.083
+        ],
+        "mouth": [
+          0.31,
+          0.296
+        ],
+        "display_size": [
+          123.2568,
+          205.0
+        ],
+        "anchor": [
+          0.5,
+          0.52
+        ],
+        "filter": "linear"
+      },
+      "sleep": {
+        "texture": "res://assets/characters/catalog-e-sleep.png",
+        "rect": [
+          1707,
+          160,
+          377,
+          372
+        ],
+        "eye": [
+          0.28,
+          0.32,
+          0.12,
+          0.09
+        ],
+        "mouth": [
+          0.22,
+          0.55
+        ],
+        "display_size": [
+          113.5054,
+          112.0
+        ],
+        "anchor": [
+          0.5,
+          1.0
+        ],
+        "filter": "linear"
+      }
+    }
+  }
+}

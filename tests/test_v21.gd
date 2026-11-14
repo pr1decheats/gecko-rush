@@ -90,6 +90,7 @@ func _run() -> void:
 	check(game.center_event == "ride" and absf(game.center_elapsed - before) < 0.00001, "checkpoint restores central wall lifetime")
 	check(not game.course.safe_sections.is_empty(), "checkpoint restores protected course interval")
 	game._continue_run()
+	game._process(3.0) # Resume countdown must finish before driving the run.
 	for index in range(181):
 		game._simulate_step(1.0 / 120.0)
 	game._process(0.0)

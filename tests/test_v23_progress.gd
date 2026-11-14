@@ -65,9 +65,9 @@ func _run() -> void:
 	check(p.get_level() == 1 and p.is_world_unlocked("jungle"), "A new profile starts on Easy")
 	check(not p.is_world_unlocked("sky"), "A new profile cannot select Insane")
 	var first: Dictionary = p.finish_run({"world_id": "jungle", "height": 100.0, "passed": 4, "jumps": 1, "coins": 2, "run_id": "short"})
-	check(first["xp"] == 26 and first["xp"] < 35, "Easy first-run XP is slower than v2.2, including the same achievement")
+	check(first["xp"] == 28 and first["xp"] < 35, "Easy first-run XP is slightly faster than v2.5 while remaining below v2.2")
 	var repeat: Dictionary = p.finish_run({"height": 100.0, "passed": 5, "run_id": "repeat"})
-	check(repeat["xp"] == 6 and repeat["xp"] < 12, "Easy repeat XP is slower than v2.2")
+	check(repeat["xp"] == 8 and repeat["xp"] < 12, "Easy repeat XP is slightly faster than v2.5 while remaining below v2.2")
 	fresh()
 	for index: int in 12:
 		var before: int = p.data["xp"]

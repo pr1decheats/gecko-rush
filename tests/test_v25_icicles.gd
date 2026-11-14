@@ -108,9 +108,8 @@ func _run() -> void:
 				dark = dark or pixel.get_luminance() < 0.35
 	check(bright and dark, "icicle has a bright internal face and a dark contrasting contour")
 	var chunk := course._central_hazard("ice_chunk", 0.0)
-	var frost := course._central_hazard("frost", 0.0)
 	var teeth := course._wall_spikes(0.0, 2000.0, 48.0)
-	check(chunk["r"] == 38.0 and frost["r"] == 13.0 and frost["half_length"] == 38.0, "ice chunks and frost keep their existing dimensions")
+	check(chunk["r"] == 38.0, "ice chunks keep their existing dimensions")
 	check(teeth["kind"] == "ice_teeth" and course.SPIKE_REACH == 84.0, "wall ice teeth keep their existing reach and silhouette")
 	var kinds: Dictionary = {}
 	for world: String in course.WORLD_TYPES:

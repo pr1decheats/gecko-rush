@@ -5,8 +5,8 @@ Python standard library only; runs on Linux and macOS without Apple tools.
 Checks the actual ZIP, device executable, metadata, PCK checksums and all compiled
 scripts. Does not run, sign, build or publish either application.
 
-    python3 .github/verify_mobile.py --ipa GeckoRush-2.5-unsigned.ipa \
-        --apk GeckoRush-2.5.apk --apk-sha256 <frozen SHA-256>
+    python3 .github/verify_mobile.py --ipa GeckoRush-2.6-unsigned.ipa \
+        --apk GeckoRush-2.6.apk --apk-sha256 <frozen SHA-256>
 """
 
 import argparse
@@ -297,6 +297,36 @@ def inspect_pck(data, version):
                      "sha256": hashlib.sha256(data).hexdigest()}
 
 
+def character_art_paths(entries):
+    """Resolve the shipped atlas remaps, rather than checking only source names."""
+    catalog_path = "assets/characters/catalog.json"
+    require(catalog_path in entries, "Illustrated character catalog is absent")
+    catalog = json.loads(entries[catalog_path])
+    skins = catalog.get("skins", {})
+    require(len(skins) == 21 and "standard_green" in skins, "Expected default gecko and twenty illustrated skins")
+    paths = {catalog_path, "assets/characters/rig.gdshader", "assets/app-icon.png"}
+    textures = set()
+    for name, skin in skins.items():
+        for pose in ("run", "sleep"):
+            data = skin.get(pose, {})
+            texture = data.get("texture", "")
+            require(texture.startswith("res://assets/characters/") and texture.endswith(".png"), f"Invalid character atlas: {name}/{pose}")
+            texture = safe_path(texture[6:], "Character atlas")
+            textures.add(texture)
+            remap = texture + ".import"
+            require(remap in entries, f"Atlas resource remap is absent: {texture}")
+            match = re.search(r'^path="res://([^"\n]+)"', entries[remap].decode("utf-8"), re.MULTILINE)
+            require(match is not None, f"Atlas has no exported texture target: {texture}")
+            target = safe_path(match.group(1), "Imported atlas")
+            require(target in entries and entries[target].startswith(b"GST2"), f"Imported illustrated texture is absent: {target}")
+            require(len(data.get("rect", [])) == 4, f"Atlas crop is absent: {name}/{pose}")
+            paths.update((remap, target))
+    require(len(textures) == 11, "Expected eleven shared illustrated atlases")
+    require(all(path in entries for path in paths), "Missing character shader, icon or atlas resource")
+    require(hashlib.sha256(entries["assets/app-icon.png"]).hexdigest() == "150457996b6cf228e016a05b2cc2aa184b97fee2038c153b3b8ee266b891c5c7", "Application icon differs from the new supplied-reference artwork")
+    return paths
+
+
 def compare_android(entries, apk_path, expected_sha256, version):
     require(apk_path.is_file(), f"Frozen Android APK not found: {apk_path}")
     digest = sha256_file(apk_path)
@@ -310,6 +340,7 @@ def compare_android(entries, apk_path, expected_sha256, version):
     require(scripts == expected_scripts,
             f"Compiled script set differs: missing={sorted(expected_scripts - scripts)}, "
             f"unexpected={sorted(scripts - expected_scripts)}")
+    artwork = character_art_paths(entries) if tuple(int(part) for part in version.split(".")) >= (2, 6, 0) else set()
     with zipfile.ZipFile(apk_path) as apk:
         names = apk.namelist()
         normalized = set()
@@ -332,11 +363,14 @@ def compare_android(entries, apk_path, expected_sha256, version):
             require(entries[name].startswith(b"GDSC"), f"Not a compiled GDScript: {name}")
             require(entries[name] == apk.read("assets/" + name),
                     f"iOS/Android compiled script mismatch: {name}")
+        for name in sorted(artwork):
+            require("assets/" + name in normalized and entries[name] == apk.read("assets/" + name),
+                    f"Illustrated character resource differs from Android: {name}")
     return {"apk": str(apk_path), "apk_sha256": digest,
-            "compiled_scripts_identical": len(scripts)}
+            "compiled_scripts_identical": len(scripts), "illustrated_resources_identical": len(artwork)}
 
 
-def verify(ipa_path, apk_path, apk_sha256, version="2.5.0", build="7"):
+def verify(ipa_path, apk_path, apk_sha256, version="2.6.0", build="8"):
     require(ipa_path.is_file(), f"Actual IPA not found: {ipa_path}")
     with zipfile.ZipFile(ipa_path) as archive:
         members, root = inspect_archive(archive)
@@ -385,8 +419,8 @@ def main():
     parser.add_argument("--ipa", type=Path, required=True)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--apk-sha256", required=True, help="SHA-256 of the frozen signed APK")
-    parser.add_argument("--version", default="2.5.0")
-    parser.add_argument("--build", default="7")
+    parser.add_argument("--version", default="2.6.0")
+    parser.add_argument("--build", default="8")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-fA-F]{64}", args.apk_sha256):
         parser.error("--apk-sha256 must contain exactly 64 hexadecimal characters")

@@ -140,6 +140,7 @@ func _test_pending_roundtrip() -> void:
 	_restore_from_disk()
 	check(game.state == game.State.PAUSED and game.run_time == 50.0 and game.center_pending_metres == 1500.0 and not game.center_first_given and game.center_event == "off", "Pause and disk restore preserve pending night milestone without a ghost")
 	game._continue_run()
+	game._process(3.0) # Resume countdown must finish before driving the run.
 	game.run_time = 64.0
 	game._tick_center_event(STEP)
 	check(game.center_event == "preview" and game.center_will_appear and game.center_active_metres == 1500.0, "Resumed pending event starts at the first full daylight window")
@@ -162,6 +163,7 @@ func _test_schema6_migration() -> void:
 		_restore_from_disk()
 		check(game.state == game.State.PAUSED and game.center_event == "off" and game.center_pending_metres == 1500.0 and not game.center_first_given and game.center_next_allowed_time == 0.0, "Old schema6 ambiguous night checkpoint repairs the skipped first opportunity: " + phase)
 		game._continue_run()
+		game._process(3.0) # Resume countdown must finish before driving the run.
 		game.run_time = 64.0
 		game._tick_center_event(STEP)
 		check(game.center_will_appear and game.center_active_metres == 1500.0, "Migrated old checkpoint receives a guaranteed first daytime wall: " + phase)

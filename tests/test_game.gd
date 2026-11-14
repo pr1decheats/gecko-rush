@@ -79,6 +79,7 @@ func _run() -> void:
 	check(absf(game.run_time - frozen_time) < 0.0000001, "restored moving-hazard clock retains precision")
 	check(game.course.snapshot().hazards.size() == saved.course.hazards.size(), "course obstacles survive checkpoint")
 	game._continue_run()
+	game._process(3.0) # Resume countdown must finish before driving the run.
 	for index in 12:
 		game._simulate_step(1.0 / 120.0)
 	check(game.side == 1 and game.run_jumps == 3, "restored flight lands exactly once")

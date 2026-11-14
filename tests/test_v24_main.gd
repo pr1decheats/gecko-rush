@@ -167,6 +167,7 @@ func _test_cooldown_and_long_transfer() -> void:
 	check(game.state == game.State.PAUSED and game.center_next_allowed_time == 70.0, "disk restore retains the real central cooldown")
 	check(_canonical(game.course.safe_sections) == safe_before, "disk restore preserves the existing post-transfer safe placement")
 	game._continue_run()
+	game._process(3.0) # Resume countdown must finish before driving the run.
 	game.max_height_px = game.next_center_metres * RushTuning.PIXELS_PER_METRE
 	game.height_px = game.max_height_px
 	game.run_time = 20.0
@@ -190,6 +191,7 @@ func _test_night_restore() -> void:
 	check(game.state == game.State.PAUSED and game.run_time == 50.0 and is_equal_approx(game.current_speed(), float(RushTuning.profile_for("ice")["night_speed"])) and is_equal_approx(game.current_speed(), speed_before), "disk checkpoint retains 4km night pace and phase")
 	check(game.center_event == "off" and game.center_next_allowed_time == 91.0 and game.course.safe_sections.is_empty(), "night restore retains cooldown without manufacturing protected terrain")
 	game._continue_run()
+	game._process(3.0) # Resume countdown must finish before driving the run.
 	game._simulate_step(STEP)
 	check(game.state == game.State.DYING and game.center_event == "off" and p.data.runs == 1, "resumed night milestone still collides with its saved thin wall")
 
@@ -213,6 +215,7 @@ func _test_illegal_night_center_restore() -> void:
 		if phase != "preview":
 			check(game.side == -1 and game.gecko.mode == "run" and game.player_position().x == game.LEFT_X, "cancelled transfer restores its original outer wall")
 		game._continue_run()
+		game._process(3.0) # Resume countdown must finish before driving the run.
 		game.next_center_metres = 1500.0
 		game._tick_center_event(STEP)
 		check(game.center_event == "off" and _canonical(game.course.safe_sections) == protected_before, "resumed night cannot start another preview or extend saved protection")

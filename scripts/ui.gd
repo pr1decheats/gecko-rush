@@ -34,6 +34,53 @@ var _hint_visible := true
 var _safe_top := 64.0
 var _safe_bottom := 50.0
 
+const SKIN_RARITIES: Array = [
+	{"id": "common", "name": "Обычные", "color": Color("a5b6bf"), "price": 150},
+	{"id": "rare", "name": "Редкие", "color": Color("68c9f4"), "price": 350},
+	{"id": "epic", "name": "Эпические", "color": Color("c695ff"), "price": 500},
+	{"id": "legendary", "name": "Легендарные", "color": Color("f4c66c"), "price": 750},
+	{"id": "mythic", "name": "Мифические", "color": Color("ff96bf"), "price": 1000}
+]
+
+
+class SkinPreview extends Control:
+	var skin_id := "standard_green"
+	var accent := Color("a5d66f")
+	var scroll_owner: ScrollContainer
+	var gecko: Node2D
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clip_contents = true
+		gecko = load("res://scripts/gecko.gd").new()
+		gecko.set_skin(skin_id)
+		gecko.mode = "run"
+		gecko.run_speed_factor = 0.75
+		add_child(gecko)
+		resized.connect(_layout)
+		_layout()
+
+	func _layout() -> void:
+		if not is_instance_valid(gecko):
+			return
+		var factor := minf(1.1, minf(size.y / 225.0, size.x / 176.0))
+		gecko.scale = Vector2.ONE * factor
+		gecko.position = Vector2(size.x * 0.5, size.y * 0.52)
+		queue_redraw()
+
+	func _process(_delta: float) -> void:
+		if not is_instance_valid(gecko):
+			return
+		var on_screen := is_visible_in_tree()
+		if is_instance_valid(scroll_owner):
+			on_screen = on_screen and get_global_rect().intersects(scroll_owner.get_global_rect())
+		gecko.set_process(on_screen)
+
+	func _draw() -> void:
+		var centre := size * Vector2(0.5, 0.53)
+		draw_circle(centre, minf(size.y * 0.43, size.x * 0.35), Color(accent, 0.08))
+		draw_arc(centre, minf(size.y * 0.43, size.x * 0.35), 0.15, PI * 1.6, 40, Color(accent, 0.18), 2.0, true)
+
 
 class CoinArt extends Control:
 
@@ -195,6 +242,20 @@ func _dispatch_action(name_value: String, payload: Variant = null) -> void:
 		_settings_tab = str(payload)
 		Audio.play_sound("button")
 		show_panel("settings")
+		return
+	if name_value in ["skin_buy", "skin_select"]:
+		var id := str(payload)
+		var success: bool
+		if name_value == "skin_select" or Progress.owns_skin(id):
+			success = Progress.select_skin(id)
+		else:
+			success = Progress.purchase_skin(id)
+		if success:
+			Audio.play_sound("button")
+			show_panel("shop")
+			action.emit("appearance", id)
+		else:
+			toast("Недостаточно монет" if name_value == "skin_buy" else "Сначала купи этот скин")
 		return
 	action.emit(name_value, payload)
 
@@ -641,21 +702,72 @@ func show_panel(name_value: String) -> void:
 
 func _show_shop() -> void:
 	var body := _panel_shell("МАГАЗИН", "Новые образы для новых высот")
-	_spacer(body, 100)
-	var chest := ChestArt.new()
-	chest.custom_minimum_size = Vector2(0, 450)
-	chest.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	body.add_child(chest)
-	_spacer(body, 35)
-	body.add_child(_label("Скоро здесь\nпоявятся скины!", 53, INK, true, HORIZONTAL_ALIGNMENT_CENTER))
-	body.add_child(_label("Пока здесь тихо. Исследуй миры,\nсобирай монеты и покоряй новые высоты.", 29, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER))
-	_spacer(body, 20)
-	var price := _card(body, Color("edf1d9"), 34)
-	price.add_child(_label("Случайный скин — 100 монет", 29, INK, true, HORIZONTAL_ALIGNMENT_CENTER))
-	price.add_child(_label("Покупки появятся в будущем обновлении", 24, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER))
-	_spacer(body, 50, true)
-	body.add_child(_button("В ГЛАВНОЕ МЕНЮ", "menu", null, 106, true, 31))
+	body.add_child(_label("Скины меняют внешность, а не скорость и награды.", 25, MUTED))
+	var default_skin: Dictionary = Progress.get_skin("standard_green")
+	_skin_card(body, default_skin, Color("a5d66f"), true)
+	var columns := 4 if get_viewport().get_visible_rect().size.x >= 1800.0 else 2
+	for rarity: Dictionary in SKIN_RARITIES:
+		var heading := _row(body, 18)
+		var heading_color: Color = rarity["color"] if _is_dark() else Color(rarity["color"]).darkened(0.36)
+		var title := _label(str(rarity["name"]), 33, heading_color, true)
+		title.name = "Rarity_" + str(rarity["id"])
+		heading.add_child(title)
+		var price := _label(L10n.format_text("%d монет", [int(rarity["price"])]), 25, MUTED)
+		price.size_flags_horizontal = Control.SIZE_SHRINK_END
+		price.autowrap_mode = TextServer.AUTOWRAP_OFF
+		heading.add_child(price)
+		var grid := GridContainer.new()
+		grid.columns = columns
+		grid.add_theme_constant_override("h_separation", 18)
+		grid.add_theme_constant_override("v_separation", 18)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		body.add_child(grid)
+		for skin: Dictionary in Progress.SKINS:
+			if str(skin["id"]) != "standard_green" and str(skin["rarity"]) == str(rarity["id"]):
+				_skin_card(grid, skin, rarity["color"])
+		_spacer(body, 8)
 	_spacer(body, 12)
+
+
+func _skin_card(parent: Node, skin: Dictionary, accent: Color, default_skin: bool = false) -> void:
+	var id := str(skin["id"])
+	var owned: bool = Progress.owns_skin(id)
+	var selected := str(Progress.data.get("skin_id", "standard_green")) == id
+	var cost := int(skin["price"])
+	var card := _card(parent, PAPER.lerp(accent, 0.07), 20)
+	var panel := card.get_parent().get_parent() as PanelContainer
+	panel.name = "Skin_" + id
+	panel.add_theme_stylebox_override("panel", _style(PAPER.lerp(accent, 0.07), 9, LIME if selected else Color(accent, 0.6)))
+	var preview := SkinPreview.new()
+	preview.name = "Preview_" + id
+	preview.skin_id = id
+	preview.accent = accent
+	preview.scroll_owner = _find_shop_scroll(parent)
+	preview.custom_minimum_size = Vector2(0, 210 if default_skin else 250)
+	card.add_child(preview)
+	var title := _label(str(skin["name"]), 29, INK, true, HORIZONTAL_ALIGNMENT_CENTER)
+	title.name = "SkinTitle"
+	title.custom_minimum_size.y = 80.0 if not default_skin else 40.0
+	card.add_child(title)
+	var status := _label("Бесплатно" if default_skin else ("В коллекции" if owned else L10n.format_text("%d монет", [cost])), 23, MUTED, false, HORIZONTAL_ALIGNMENT_CENTER)
+	status.name = "SkinStatus"
+	card.add_child(status)
+	var caption := "ВЫБРАН" if selected else ("НАДЕТЬ" if owned else "КУПИТЬ")
+	var button := _button(caption, "skin_select" if owned else "skin_buy", id, 90, selected, 26)
+	button.name = "SkinAction_" + id
+	button.disabled = selected or (not owned and int(Progress.data.get("coins", 0)) < cost)
+	if button.disabled and not selected:
+		button.tooltip_text = L10n.text("Недостаточно монет")
+	card.add_child(button)
+
+
+func _find_shop_scroll(from: Node) -> ScrollContainer:
+	var parent := from
+	while parent != null:
+		if parent is ScrollContainer:
+			return parent
+		parent = parent.get_parent()
+	return null
 
 
 func _show_profile() -> void:
@@ -670,6 +782,7 @@ func _show_profile() -> void:
 		var gecko_script: Script = load("res://scripts/gecko.gd")
 		var gecko: Node2D = Node2D.new()
 		gecko.set_script(gecko_script)
+		gecko.set_skin(str(Progress.current_skin()["id"]))
 		avatar.add_child(gecko)
 		gecko.position = Vector2(88, 127)
 		gecko.scale = Vector2(1.2, 1.2)
@@ -677,7 +790,7 @@ func _show_profile() -> void:
 	hero_info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hero_info.add_child(_label("УРОВЕНЬ %d" % Progress.get_level(), 45, INK, true))
 	hero_info.add_child(_label(Progress.level_title(), 31, Color("638147"), true))
-	hero_info.add_child(_label("Стандартный зелёный геккон", 23, MUTED))
+	hero_info.add_child(_label(str(Progress.current_skin()["name"]), 23, MUTED))
 	hero.add_child(_progress(Progress.xp_in_level(), Progress.xp_required()))
 	hero.add_child(_label("%s / %s XP до следующего уровня" % [_number(Progress.xp_in_level()), _number(Progress.xp_required())], 24, MUTED))
 	var grid := GridContainer.new()
@@ -750,6 +863,13 @@ func _world_button(parent: Node, item: Dictionary) -> void:
 	var difficulty := _label(str(item.get("name", "")), 21, MUTED)
 	difficulty.name = "WorldDifficulty"
 	info.add_child(difficulty)
+	var unlock := _label(L10n.format_text("С уровня %d", [int(item.get("unlock", 1))]), 22, MUTED)
+	unlock.name = "WorldUnlockLevel"
+	info.add_child(unlock)
+	if not unlocked and not str(item.get("previous_world", "")).is_empty():
+		var requirement := _label(L10n.format_text("%s м в «%s»", [_number(item.get("required_metres", 0)), _world_name(str(item["previous_world"]))]), 20, MUTED)
+		requirement.name = "WorldUnlockRecord"
+		info.add_child(requirement)
 	_spacer(card, 0, true)
 	var caption := "ВЫБРАН" if selected else ("ВЫБРАТЬ" if unlocked else "ЗАКРЫТО")
 	var button := _button(caption, "world", id, 64, selected, 22)
@@ -805,9 +925,11 @@ func _show_settings() -> void:
 			var fps_card := _card(body)
 			fps_card.add_child(_label("Частота кадров", 35, INK, true))
 			var fps_row := _row(fps_card)
-			for rate in [60, 120]:
-				fps_row.add_child(_button("%d Гц" % rate, "setting", {"key": "fps", "value": rate}, 94, int(Progress.data.settings.get("fps", 60)) == rate))
-			fps_card.add_child(_label("На экранах 120 Гц можно выбрать 120 FPS.", 25, MUTED))
+			for rate in Progress.available_fps():
+				var rate_button := _button(L10n.format_text("%d FPS", [rate]), "setting", {"key": "fps", "value": rate}, 94, int(Progress.data.settings.get("fps", 60)) == rate)
+				rate_button.name = "FPS_" + str(rate)
+				fps_row.add_child(rate_button)
+			fps_card.add_child(_label("До 240 FPS на ПК с подходящим монитором. На телефоне — до 120 FPS." if 240 in Progress.available_fps() else "До 120 FPS на подходящих экранах и устройствах.", 25, MUTED))
 			var theme_card := _card(body)
 			theme_card.add_child(_label("Тема оформления", 35, INK, true))
 			var theme_row := _row(theme_card)

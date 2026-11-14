@@ -2,7 +2,7 @@ extends Node2D
 ## One continuous world: the menu's little clearing becomes the endless climb.
 ## Simulation is independent of rendering, and all flight checks use <= 1/120 s steps.
 
-enum State { MENU, TRANSITION, RUNNING, DYING, RESULTS, PAUSED, PANEL }
+enum State { MENU, TRANSITION, RUNNING, DYING, RESULTS, PAUSED, PANEL, RESUMING }
 
 const LEFT_X: float = RushTuning.PLAYER_LEFT
 const RIGHT_X: float = RushTuning.PLAYER_RIGHT
@@ -13,6 +13,8 @@ const PLAYER_RADIUS: float = 20.0
 const RESUME_SCHEMA: int = 6
 const CENTER_WALL_LEFT := RushTuning.CENTER_WALL_LEFT
 const CENTER_WALL_RIGHT := RushTuning.CENTER_WALL_RIGHT
+const RESUME_COUNTDOWN_SECONDS := 3.0
+const COUNTDOWN_FONT: Font = preload("res://assets/fonts/OpenSans-Bold.ttf")
 
 var state: State = State.MENU
 var environment: JungleEnvironment
@@ -57,6 +59,12 @@ var center_next_allowed_time: float = 0.0
 var center_pending_metres: float = 0.0
 var center_first_given: bool = false
 var center_active_metres: float = 0.0
+var resume_elapsed: float = 0.0
+var _application_active: bool = true
+var _resume_layer: CanvasLayer
+var _resume_backdrop: ColorRect
+var _resume_panel: Panel
+var _resume_label: Label
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
@@ -87,6 +95,7 @@ func _update_layout() -> void:
 	if environment != null:
 		environment.viewport_height = get_viewport_rect().size.y
 	_update_camera(0.0)
+	_layout_resume_countdown()
 
 func speed_at(height: float) -> float:
 	return RushTuning.speed_at(height, world_id)
@@ -97,6 +106,8 @@ func current_speed() -> float:
 func _apply_settings() -> void:
 	if environment != null:
 		environment.theme = str(Progress.data.settings.get("theme", "dark"))
+	if gecko != null and gecko.has_method("set_skin"):
+		gecko.call("set_skin", str(Progress.data.get("skin_id", "standard_green")))
 
 func _refresh_display_rate() -> void:
 	Progress.ANDROID_REFRESH.request_rate(int(Progress.data.settings.get("fps", 60)))
@@ -125,7 +136,7 @@ func player_position() -> Vector2:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE or event.keycode == KEY_P:
-			if state == State.RUNNING:
+			if state == State.RUNNING or state == State.RESUMING:
 				_pause_run()
 			elif state == State.PAUSED:
 				_continue_run()
@@ -176,6 +187,8 @@ func _physics_process(delta: float) -> void:
 		_store_resume()
 
 func _simulate_step(delta: float) -> void:
+	if state != State.RUNNING:
+		return
 	var previous_at := player_position()
 	var previous_time := run_time
 	run_time += delta
@@ -380,7 +393,7 @@ func _update_center_visual(night: float) -> void:
 	center_wall.ride_elapsed = center_elapsed if center_event == "ride" else 0.0
 	center_wall.player_height = height_px
 	center_wall.night_amount = night
-	center_wall.animation_enabled = state != State.PAUSED
+	center_wall.animation_enabled = not state in [State.PAUSED, State.RESUMING]
 	center_wall.visible = not state in [State.MENU, State.PANEL]
 	center_wall.queue_redraw()
 	match center_event:
@@ -397,6 +410,11 @@ func _process(delta: float) -> void:
 	course.night_amount = night
 	gecko.night_amount = night
 	_update_center_visual(night)
+	if state == State.RESUMING:
+		_tick_resume_countdown(delta)
+		_set_run_visuals_frozen(state in [State.PAUSED, State.RESUMING])
+		_update_camera(0.0)
+		return
 	if state == State.RUNNING:
 		ui.update_hud(max_height_px / PIXELS_PER_METRE, run_coins)
 		ui.update_cycle(RushTuning.is_night(run_time), RushTuning.cycle_remaining(run_time))
@@ -433,10 +451,8 @@ func _process(delta: float) -> void:
 			elif bool(last_result.get("new_best", false)):
 				Audio.play_sound("record")
 	_update_camera(delta)
-	effects.enabled = state != State.PAUSED
-	# Idle menus remain alive; the run itself freezes completely during a pause.
-	gecko.set_process(state != State.PAUSED)
-	environment.set_process(state != State.PAUSED)
+	# Menus remain alive; pausing and the entire resume countdown freeze the run.
+	_set_run_visuals_frozen(state in [State.PAUSED, State.RESUMING])
 
 func _update_camera(delta: float) -> void:
 	if world == null or environment == null:
@@ -448,7 +464,7 @@ func _update_camera(delta: float) -> void:
 		target_height += current_speed() / 7.5 - bob
 	if state == State.MENU or state == State.PANEL:
 		target_height = 0.0
-	if delta > 0.0 and state != State.PAUSED:
+	if delta > 0.0 and not state in [State.PAUSED, State.RESUMING]:
 		camera_height = lerpf(camera_height, target_height, 1.0 - exp(-delta * 7.5))
 	var shake := Vector2.ZERO
 	if state == State.DYING and camera_shake > 0.0:
@@ -466,6 +482,8 @@ func _on_action(name: String, payload: Variant = null) -> void:
 	if name != "setting":
 		Audio.play_sound("button")
 	match name:
+		"appearance":
+			_apply_settings()
 		"play":
 			_cash_out_saved_run()
 			_start_run(false)
@@ -474,7 +492,7 @@ func _on_action(name: String, payload: Variant = null) -> void:
 		"resume":
 			_restore_run()
 		"menu":
-			if state == State.PAUSED:
+			if state in [State.PAUSED, State.RESUMING]:
 				_cash_out_current_run()
 			_show_menu()
 		"shop", "profile", "daily", "settings":
@@ -503,6 +521,8 @@ func _on_action(name: String, payload: Variant = null) -> void:
 					ui.show_panel("settings")
 
 func _show_menu() -> void:
+	_hide_resume_countdown()
+	_set_run_visuals_frozen(false)
 	var previous_save: Dictionary = Progress.load_resume()
 	if not previous_save.is_empty() and int(previous_save.get("schema", 0)) != RESUME_SCHEMA:
 		_cash_out_saved_run()
@@ -528,6 +548,8 @@ func _show_menu() -> void:
 	_update_camera(0.0)
 
 func _start_run(quick: bool) -> void:
+	_hide_resume_countdown()
+	_set_run_visuals_frozen(false)
 	Progress.clear_resume()
 	world_id = str(Progress.current_world().id)
 	environment.set_world(world_id)
@@ -587,23 +609,114 @@ func _die(cause: String = "impact") -> void:
 	ui.fade_out(0.2)
 
 func _pause_run() -> void:
-	if state != State.RUNNING:
+	if not state in [State.RUNNING, State.RESUMING]:
 		return
+	_hide_resume_countdown()
 	state = State.PAUSED
+	_set_run_visuals_frozen(true)
 	_store_resume()
 	ui.show_pause()
 
 func _continue_run() -> void:
-	if state != State.PAUSED:
+	if state != State.PAUSED or not _application_active:
 		return
-	state = State.RUNNING
+	state = State.RESUMING
+	resume_elapsed = 0.0
 	ui.show_hud()
 	ui.update_hud(max_height_px / PIXELS_PER_METRE, run_coins)
-	ui.set_hint_visible(run_jumps == 0)
-	ui.fade_in(0.15)
+	ui.update_cycle(RushTuning.is_night(run_time), RushTuning.cycle_remaining(run_time))
+	ui.set_hint_visible(false)
+	_set_run_visuals_frozen(true)
+	_show_resume_countdown()
+
+func _set_run_visuals_frozen(frozen: bool) -> void:
+	if gecko != null:
+		gecko.set_process(not frozen)
+	if environment != null:
+		environment.set_process(not frozen)
+	if effects != null:
+		effects.enabled = not frozen
+	if center_wall != null:
+		center_wall.animation_enabled = not frozen
+
+func _show_resume_countdown() -> void:
+	if _resume_layer == null:
+		_resume_layer = CanvasLayer.new()
+		_resume_layer.name = "ResumeCountdown"
+		_resume_layer.layer = 64
+		add_child(_resume_layer)
+		_resume_backdrop = ColorRect.new()
+		_resume_backdrop.name = "InputGuard"
+		_resume_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+		_resume_layer.add_child(_resume_backdrop)
+		_resume_panel = Panel.new()
+		_resume_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_resume_layer.add_child(_resume_panel)
+		_resume_label = Label.new()
+		_resume_label.name = "ResumeDigit"
+		_resume_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_resume_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_resume_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_resume_label.add_theme_font_override("font", COUNTDOWN_FONT)
+		_resume_panel.add_child(_resume_label)
+	var light := str(Progress.data.settings.get("theme", "dark")) == "light"
+	_resume_backdrop.color = Color(0.03, 0.08, 0.09, 0.35 if light else 0.55)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("fff6db") if light else Color("102133")
+	style.set_corner_radius_all(32)
+	style.set_border_width_all(3)
+	style.border_color = Color("7d9f53") if light else Color("8eaf65")
+	style.shadow_color = Color(0, 0, 0, 0.25)
+	style.shadow_size = 14
+	style.shadow_offset = Vector2(0, 7)
+	_resume_panel.add_theme_stylebox_override("panel", style)
+	_resume_label.add_theme_color_override("font_color", Color("153d33") if light else Color("d2f391"))
+	_resume_layer.visible = true
+	_layout_resume_countdown()
+	_update_resume_digit()
+
+func _layout_resume_countdown() -> void:
+	if _resume_layer == null:
+		return
+	var frame := get_viewport_rect().size
+	_resume_backdrop.position = Vector2.ZERO
+	_resume_backdrop.size = frame
+	var extent := clampf(minf(frame.x, frame.y) * 0.29, 280.0, 390.0)
+	_resume_panel.size = Vector2.ONE * extent
+	_resume_panel.position = (frame - _resume_panel.size) * 0.5
+	_resume_label.position = Vector2.ZERO
+	_resume_label.size = _resume_panel.size
+	_resume_label.pivot_offset = _resume_label.size * 0.5
+	_resume_label.add_theme_font_size_override("font_size", int(extent * 0.66))
+
+func _update_resume_digit() -> void:
+	if _resume_label == null:
+		return
+	_resume_label.text = str(clampi(3 - floori(resume_elapsed), 1, 3))
+	var beat := fposmod(resume_elapsed, 1.0)
+	var pulse := lerpf(1.10, 1.0, smoothstep(0.0, 0.22, beat))
+	_resume_label.scale = Vector2.ONE * pulse
+	_resume_label.modulate.a = 1.0 - 0.25 * smoothstep(0.72, 1.0, beat)
+
+func _hide_resume_countdown() -> void:
+	resume_elapsed = 0.0
+	if _resume_layer != null:
+		_resume_layer.visible = false
+
+func _tick_resume_countdown(delta: float) -> void:
+	if not _application_active:
+		_pause_run()
+		return
+	resume_elapsed = minf(RESUME_COUNTDOWN_SECONDS, resume_elapsed + maxf(delta, 0.0))
+	if resume_elapsed >= RESUME_COUNTDOWN_SECONDS:
+		_hide_resume_countdown()
+		state = State.RUNNING
+		ui.set_hint_visible(run_jumps == 0)
+		return
+	_update_resume_digit()
 
 func _store_resume() -> void:
-	if state != State.RUNNING and state != State.PAUSED:
+	if not state in [State.RUNNING, State.PAUSED, State.RESUMING]:
 		return
 	Progress.save_resume({
 		"schema": RESUME_SCHEMA, "run_id": run_id, "world_id": world_id,
@@ -621,6 +734,7 @@ func _store_resume() -> void:
 	})
 
 func _restore_run() -> void:
+	_hide_resume_countdown()
 	var saved: Dictionary = Progress.load_resume()
 	if int(saved.get("schema", 0)) != RESUME_SCHEMA or not saved.get("course", {}) is Dictionary:
 		Progress.clear_resume()
@@ -688,6 +802,7 @@ func _restore_run() -> void:
 		_cancel_center_for_night()
 	effects.clear()
 	state = State.PAUSED
+	_set_run_visuals_frozen(true)
 	_update_center_visual(RushTuning.night_amount(run_time))
 	ui.show_pause()
 	_update_camera(0.0)
@@ -713,8 +828,10 @@ func _notification(what: int) -> void:
 	if not is_node_ready():
 		return
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_APPLICATION_RESUMED:
+		_application_active = true
 		_refresh_display_rate.call_deferred()
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		_application_active = false
 		_pause_run()
 		if state == State.TRANSITION:
 			# Commit the short launch to a safe, resumable running state.
@@ -725,6 +842,13 @@ func _notification(what: int) -> void:
 			gecko.side = side
 			gecko.position = player_position()
 			_pause_run()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if state in [State.RUNNING, State.RESUMING]:
+			_pause_run()
+		elif state == State.PAUSED:
+			_continue_run()
+		elif state == State.PANEL:
+			_show_menu()
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_store_resume()
 		Progress.save_game()

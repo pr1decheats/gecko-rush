@@ -104,7 +104,9 @@ func _run() -> void:
 				check(card != null, "selector includes " + str(world.id))
 				var button: Button = card.find_child("Select_" + str(world.id), true, false)
 				check(button.disabled == not p.is_world_unlocked(str(world.id)), "selector reflects unlock status: " + str(world.id))
-				check(_labels(card).size() == 2, "selector contains only world and difficulty labels: " + str(world.id))
+				var requirement_visible: bool = not p.is_world_unlocked(str(world.id)) and not str(world.get("previous_world", "")).is_empty()
+				check(_labels(card).size() == (4 if requirement_visible else 3), "selector contains world, difficulty, unlock level and applicable mastery requirement: " + str(world.id))
+				check(card.find_child("WorldUnlockLevel", true, false).text == locale.format_text("С уровня %d", [int(world.get("unlock", 1))]), "selector states its unlock level: " + str(world.id))
 				check(card.find_child("WorldTitle", true, false).text == locale.text(str(world.get("world_name", world.theme_name))), "selector title names the biome: " + str(world.id))
 				check(card.find_child("WorldDifficulty", true, false).text == locale.text(str(world.name)), "selector shows difficulty as secondary label: " + str(world.id))
 				for label: Label in _labels(card):

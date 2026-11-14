@@ -15,7 +15,7 @@ func _run() -> void:
 	var presets := ConfigFile.new()
 	_check(project.load(project_root.path_join("project.godot")) == OK, "Project configuration loads")
 	_check(presets.load(project_root.path_join("export_presets.cfg")) == OK, "Export configuration loads")
-	_check(project.get_value("application", "config/icon") == "res://assets/icon.svg", "Gecko app icon is retained")
+	_check(project.get_value("application", "config/icon") == "res://assets/app-icon.png", "Requested gecko app icon is selected")
 	_check(project.get_value("application", "boot_splash/show_image") == true, "Custom engine splash is visible")
 	_check(project.get_value("application", "boot_splash/image") == "res://assets/triada-games-launch.png", "Engine uses supplied Triada logo")
 	_check(project.get_value("application", "boot_splash/stretch_mode") == 1, "Engine keeps image aspect ratio")

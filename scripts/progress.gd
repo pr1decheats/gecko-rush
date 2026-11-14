@@ -8,8 +8,32 @@ signal level_gained(level: int)
 const SAVE_VERSION: int = 3
 const PROGRESSION_RULES: int = 23
 const TUNING = preload("res://scripts/tuning.gd")
-const SKIN_PRICE: int = 100
+const RUN_XP_MULTIPLIER := 1.25
+const SKIN_PRICE: int = 150 # Common tier; individual catalog prices are authoritative.
 const ANDROID_REFRESH = preload("res://scripts/android_refresh.gd")
+const SKINS: Array = [
+	{"id": "standard_green", "name": "Стандартный зелёный геккон", "rarity": "starter", "price": 0},
+	{"id": "desert_wanderer", "name": "Пустынный скиталец", "rarity": "common", "price": 150},
+	{"id": "pirate_captain", "name": "Пиратский капитан", "rarity": "common", "price": 150},
+	{"id": "electro_shock", "name": "Электрошок", "rarity": "common", "price": 150},
+	{"id": "pixel_gecko", "name": "Пиксельный геккон", "rarity": "rare", "price": 350},
+	{"id": "robo_gecko", "name": "Робо-геккон", "rarity": "rare", "price": 350},
+	{"id": "jungle_hunter", "name": "Джунглевый охотник", "rarity": "rare", "price": 350},
+	{"id": "venom_chameleon", "name": "Ядовитый хамелеон", "rarity": "rare", "price": 350},
+	{"id": "neon_pulse", "name": "Неоновый пульс", "rarity": "rare", "price": 350},
+	{"id": "steel_knight", "name": "Стальной рыцарь", "rarity": "epic", "price": 500},
+	{"id": "cyber_ninja", "name": "Кибер-ниндзя", "rarity": "epic", "price": 500},
+	{"id": "star_wanderer", "name": "Звёздный странник", "rarity": "epic", "price": 500},
+	{"id": "volcanic_fighter", "name": "Вулканический боец", "rarity": "epic", "price": 500},
+	{"id": "cosmo_gecko", "name": "Космо-геккон", "rarity": "epic", "price": 500},
+	{"id": "shadow_jumper", "name": "Теневой прыгун", "rarity": "legendary", "price": 750},
+	{"id": "royal_pearl", "name": "Королевский жемчуг", "rarity": "legendary", "price": 750},
+	{"id": "moon_ghost", "name": "Лунный призрак", "rarity": "legendary", "price": 750},
+	{"id": "ghost_dragon", "name": "Призрачный дракон", "rarity": "legendary", "price": 750},
+	{"id": "frost_crystal", "name": "Морозный кристалл", "rarity": "legendary", "price": 750},
+	{"id": "golden_champion", "name": "Золотой чемпион", "rarity": "mythic", "price": 1000},
+	{"id": "rainbow_spark", "name": "Радужный спарк", "rarity": "mythic", "price": 1000}
+]
 const WORLDS: Array = [
 	{"id": "jungle", "world_name": "Джунгли", "name": "Лёгкий", "name_en": "Easy", "theme_name": "Джунгли", "unlock": 1, "previous_world": "", "required_metres": 0.0, "hazards": ["root", "beetle", "vine", "thorns"]},
 	{"id": "canyon", "world_name": "Каньон", "name": "Обычный", "name_en": "Normal", "theme_name": "Каньон", "unlock": 5, "previous_world": "jungle", "required_metres": 300.0, "hazards": ["boulder", "rockfall", "canyon_weight", "sand_spur"]},
@@ -68,7 +92,7 @@ func _defaults() -> Dictionary:
 		"settings": {"music": true, "sfx": true, "jump_sfx": true, "theme": "dark", "language": "ru", "fps": 60},
 		"daily": {"date": _today(), "jumps": 0, "coins": 0, "height": 0.0, "claimed": []},
 		"resume": {}, "processed_runs": [], "last_result": {},
-		# Forward-compatible placeholders; there is no shop transaction in this version.
+		# The classic outfit is always free; purchased outfits survive upgrades.
 		"skin_id": "standard_green", "owned_skins": ["standard_green"],
 		"profile_frame": "default", "sync_revision": 0
 	}
@@ -136,6 +160,14 @@ func _sanitize(raw: Dictionary) -> Dictionary:
 		clean[key] = int(_number(raw.get(key, clean[key]), float(clean[key])))
 	for key: String in ["best_height", "total_distance"]:
 		clean[key] = _number(raw.get(key, 0.0), 0.0)
+	var owned: Variant = raw.get("owned_skins", [])
+	if owned is Array:
+		for id: Variant in owned:
+			if id is String and not get_skin(id).is_empty() and not id in clean["owned_skins"]:
+				clean["owned_skins"].append(id)
+	var equipped: Variant = raw.get("skin_id", "standard_green")
+	if equipped is String and equipped in clean["owned_skins"]:
+		clean["skin_id"] = equipped
 	var unlocked: Variant = raw.get("unlocked_worlds", [])
 	if unlocked is Array:
 		for id: Variant in unlocked:
@@ -177,8 +209,7 @@ func _sanitize(raw: Dictionary) -> Dictionary:
 			var allowed: Array = ["dark", "light"] if key == "theme" else ["ru", "en", "uk"]
 			if settings.get(key) is String and settings[key] in allowed:
 				clean["settings"][key] = settings[key]
-		if (settings.get("fps") is int or settings.get("fps") is float) and float(settings["fps"]) in [60.0, 120.0]:
-			clean["settings"]["fps"] = int(settings["fps"])
+		clean["settings"]["fps"] = normalize_fps(settings.get("fps", 60), OS.has_feature("pc"))
 	var daily: Variant = raw.get("daily", {})
 	if daily is Dictionary and daily.get("date") is String and daily["date"] == _today():
 		for key: String in ["jumps", "coins", "height"]:
@@ -366,6 +397,65 @@ func select_world(id: String) -> bool:
 	changed.emit()
 	return true
 
+func get_skin(id: String) -> Dictionary:
+	for skin: Dictionary in SKINS:
+		if skin["id"] == id:
+			return skin.duplicate(true)
+	return {}
+
+func current_skin() -> Dictionary:
+	var id := str(data.get("skin_id", "standard_green"))
+	return get_skin(id if owns_skin(id) else "standard_green")
+
+func owns_skin(id: String) -> bool:
+	return not get_skin(id).is_empty() and id in data.get("owned_skins", ["standard_green"])
+
+func select_skin(id: String) -> bool:
+	if not owns_skin(id):
+		return false
+	if str(data.get("skin_id", "standard_green")) == id:
+		return true
+	data["skin_id"] = id
+	save_game()
+	changed.emit()
+	return true
+
+func purchase_skin(id: String) -> bool:
+	var skin := get_skin(id)
+	if skin.is_empty():
+		return false
+	# Repeated clicks equip the owned outfit without another charge.
+	if owns_skin(id):
+		return select_skin(id)
+	var price := int(skin["price"])
+	if price < 0 or int(data.get("coins", 0)) < price:
+		return false
+	data["coins"] = int(data["coins"]) - price
+	data["owned_skins"].append(id)
+	data["skin_id"] = id
+	save_game()
+	changed.emit()
+	return true
+
+static func supported_fps_for(desktop: bool) -> Array[int]:
+	var rates: Array[int] = [60, 120]
+	if desktop:
+		rates.append(240)
+	return rates
+
+func available_fps() -> Array[int]:
+	return supported_fps_for(OS.has_feature("pc"))
+
+static func normalize_fps(value: Variant, desktop: bool) -> int:
+	if not (value is int or value is float):
+		return 60
+	var numeric := float(value)
+	if not is_finite(numeric) or numeric != floor(numeric):
+		return 60
+	if not desktop and float(value) == 240.0:
+		return 120
+	return int(value) if float(value) in supported_fps_for(desktop) else 60
+
 func _achievement_complete(id: String) -> bool:
 	for achievement: Dictionary in ACHIEVEMENTS:
 		if achievement["id"] == id:
@@ -427,7 +517,7 @@ func finish_run(summary: Dictionary) -> Dictionary:
 	data["obstacles"] = int(data["obstacles"]) + passed
 	data["coins"] = int(data["coins"]) + reward
 	data["lifetime_coins"] = int(data["lifetime_coins"]) + reward
-	base_xp = int(floor(float(base_xp) * float(TUNING.profile_for(world_id)["xp_multiplier"])))
+	base_xp = int(floor(float(base_xp) * float(TUNING.profile_for(world_id)["xp_multiplier"]) * RUN_XP_MULTIPLIER))
 	_award_world_xp(base_xp, world_id)
 	stats["runs"] = int(stats["runs"]) + 1
 	stats["total_distance"] = float(stats["total_distance"]) + height
