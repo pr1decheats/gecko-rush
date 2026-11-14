@@ -874,15 +874,17 @@ func collect_at(point: Vector2, _time: float) -> int:
 			collected += 1
 	return collected
 
-func take_fly(point: Vector2, side: int) -> Dictionary:
+func take_fly(point: Vector2, side: int, reach: float = 105.0, previous_point: Vector2 = Vector2.INF) -> Dictionary:
 	var wanted := 0 if side < 0 else 1
+	var from := previous_point if previous_point.is_finite() else point
 	for fly: Dictionary in flies:
 		if bool(fly.get("eaten", false)) or int(fly["side"]) != wanted:
 			continue
-		var ahead := float(fly["h"]) + point.y
-		if ahead >= 70.0 and ahead <= clampf(_world_speed_at(-point.y) * 0.09 + 150.0, 210.0, 390.0) and absf(point.x - float(fly["x"])) < 60.0:
+		var at := Vector2(float(fly["x"]), -float(fly["h"]))
+		var nearest := Geometry2D.get_closest_point_to_segment(at, from, point)
+		if nearest.distance_squared_to(at) <= reach * reach:
 			fly["eaten"] = true
-			return {"position": Vector2(float(fly["x"]), -float(fly["h"]))}
+			return {"position": at}
 	return {}
 
 func count_passed(height_px: float) -> int:

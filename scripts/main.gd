@@ -227,7 +227,8 @@ func _simulate_step(delta: float) -> void:
 		effects.popup(at + Vector2(26, -55), "+%d" % picked)
 	run_passed += course.count_passed(max_height_px)
 	if jump_elapsed < 0.0 and not center_event in ["enter", "ride", "exit"] and not gecko.is_eating():
-		var fly: Dictionary = course.take_fly(at, side)
+		var mouth: Vector2 = gecko.get_mouth_position()
+		var fly: Dictionary = course.take_fly(at + mouth, side, GeckoVisual.MAX_TONGUE_REACH, previous_at + mouth)
 		if not fly.is_empty():
 			gecko.eat_to(fly.position - at)
 			Audio.play_sound("eat")

@@ -1,0 +1,161 @@
+{
+  "result": "PASS",
+  "suites": [
+    {
+      "suite": "test_game",
+      "exit_code": 0,
+      "seconds": 3.557,
+      "summary": [
+        "GAME: 46 checks, 0 failures; certified 3000 m in 16329 simulation steps"
+      ],
+      "engine_errors": false,
+      "checks": 46
+    },
+    {
+      "suite": "test_v2",
+      "exit_code": 0,
+      "seconds": 3.707,
+      "summary": [
+        "V2: 313 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 313
+    },
+    {
+      "suite": "test_v21",
+      "exit_code": 0,
+      "seconds": 3.156,
+      "summary": [
+        "V21: 66 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 66
+    },
+    {
+      "suite": "test_v22",
+      "exit_code": 0,
+      "seconds": 2.497,
+      "summary": [
+        "V22: 28 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 28
+    },
+    {
+      "suite": "test_v23_main",
+      "exit_code": 0,
+      "seconds": 10.385,
+      "summary": [
+        "V23 MAIN: 492 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 492
+    },
+    {
+      "suite": "test_v24_main",
+      "exit_code": 0,
+      "seconds": 4.096,
+      "summary": [
+        "V24 MAIN: 697 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 697
+    },
+    {
+      "suite": "test_v25_night_center",
+      "exit_code": 0,
+      "seconds": 7.492,
+      "summary": [
+        "V25 NIGHT/CENTER: 581 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 581
+    },
+    {
+      "suite": "test_v26_resume_countdown",
+      "exit_code": 0,
+      "seconds": 4.149,
+      "summary": [
+        "V26 RESUME COUNTDOWN: 81 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 81
+    },
+    {
+      "suite": "test_v26_shop_ui",
+      "exit_code": 0,
+      "seconds": 4.857,
+      "summary": [
+        "V26 SHOP UI: 463 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 463
+    },
+    {
+      "suite": "test_v27_flies",
+      "exit_code": 0,
+      "seconds": 0.804,
+      "summary": [
+        "V27 FLIES: 17 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 17
+    },
+    {
+      "suite": "test_v26_progress",
+      "exit_code": 0,
+      "seconds": 0.909,
+      "summary": [
+        "V26 PROGRESSION: 204 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 204
+    },
+    {
+      "suite": "test_progress",
+      "exit_code": 0,
+      "seconds": 0.793,
+      "summary": [],
+      "engine_errors": false,
+      "checks": 43
+    },
+    {
+      "suite": "test_v22_progress",
+      "exit_code": 0,
+      "seconds": 0.805,
+      "summary": [
+        "V22 progression isolated: 71 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 71
+    },
+    {
+      "suite": "test_v23_progress",
+      "exit_code": 0,
+      "seconds": 0.904,
+      "summary": [
+        "V23 progression: 128 checks, 0 failures"
+      ],
+      "engine_errors": false,
+      "checks": 128
+    }
+  ],
+  "production_scripts_modified_by_agent": false,
+  "total_headless_checks": 3230,
+  "prior_rendering_error_fixed": "Folded limb ribbon uses triangle strip after root fix; affected suites rerun clean",
+  "production_script_sha256": {
+    "scripts/android_refresh.gd": "13c68a6418e3ed975b40d783bbccac1d4580aa5bf4364f1940c62e00e52aaead",
+    "scripts/audio.gd": "44b39dc85d0bd96aac4aaac597d8a607d074af2576427d4e50d7fe3bbdd7d071",
+    "scripts/boot.gd": "4edf0837466606141f2a052385b4d36dbd96e6219f71c93e534cca4447e1a8e6",
+    "scripts/center_wall.gd": "66aebfe395c8886b2729e833c71bdd145d2dd9802213597c8b1f885a9d541eff",
+    "scripts/course.gd": "143a5ef321fbbfa749f289a9490875428530807b705326b4a20d84160325e441",
+    "scripts/effects.gd": "8b8e91f49806b8122b0aeb7b21ef7ce5e83e9c318155b26d97645031538e1fbb",
+    "scripts/environment.gd": "a556a175e1c1504a8e0d1cbaa136fc36c64e20f4deb0f71b21d4d3ec69d6c814",
+    "scripts/gecko.gd": "c67217305d23926c879cfbd0af2bc0f25921f67c94c4749d8e8d6327cde7459b",
+    "scripts/l10n.gd": "c8bae717c55db85e326f172765d4c0352f2bfc81149e4fdc9636c1279e9ad823",
+    "scripts/main.gd": "f5cff13fe72929d1ad472e08d0b2e5c7c26bc1032c7ecb58c7e23ada08e87663",
+    "scripts/progress.gd": "2a0fb4ede818f9e7b40c136a823f2f81b3b26d186e1b57243e7639c6517ad788",
+    "scripts/tuning.gd": "93efddd460f4e670eb6384cbb37437c8aa401070a342d680f51211f15332be42",
+    "scripts/ui.gd": "ae0ccbac60aeb0a9851ae73ed5c2ec85403e57f2f30853978c7abaff1a26fbbe"
+  }
+}

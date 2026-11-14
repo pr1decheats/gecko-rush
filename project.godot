@@ -3,7 +3,7 @@ config_version=5
 
 [application]
 config/name="Gecko Rush"
-config/version="2.6.0"
+config/version="2.7.0"
 config/description="Один прыжок. Две стены. Бесконечная высота."
 run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")

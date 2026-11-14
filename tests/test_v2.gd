@@ -93,7 +93,7 @@ func _run() -> void:
 	check(not game.course.flies.is_empty(), "wall flies spawn")
 	var fly: Dictionary = game.course.flies[0]
 	var side := -1 if int(fly.side) == 0 else 1
-	var point := Vector2(RushTuning.PLAYER_LEFT if side < 0 else RushTuning.PLAYER_RIGHT, -float(fly.h) + 210)
+	var point := Vector2(RushTuning.PLAYER_LEFT if side < 0 else RushTuning.PLAYER_RIGHT, -float(fly.h) + 60)
 	var eaten: Dictionary = game.course.take_fly(point, side)
 	check(not eaten.is_empty() and game.course.take_fly(point, side).is_empty(), "wall fly is eaten only once")
 	game.gecko.mode = "run"

@@ -53,10 +53,10 @@ func capture(name_value: String) -> void:
 		return
 	await create_timer(0.18).timeout
 	await RenderingServer.frame_post_draw
-	# Native captures must use the detailed texture rig, not the old fallback.
+	# Native captures must use the same live articulated model as the player.
 	for preview: Control in ui._content.find_children("Preview_*", "Control", true, false):
 		if preview.gecko.is_processing():
-			check(preview.gecko._detailed_active, "Visible shop preview uses detailed art: " + str(preview.gecko.skin_id))
+			check(preview.gecko.RENDERER_REVISION == 27, "Visible shop preview uses the live articulated model: " + str(preview.gecko.skin_id))
 	var image := root.get_texture().get_image()
 	check(not image.is_empty() and image.save_png(capture_directory.path_join(name_value + ".png")) == OK, "Capture " + name_value)
 

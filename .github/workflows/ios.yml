@@ -23,10 +23,10 @@ jobs:
       contents: write
     env:
       GODOT_VERSION: 4.6.3
-      RELEASE_VERSION: "2.6.0"
-      RELEASE_BUILD: "8"
-      RELEASE_TAG: v2.6.0
-      RELEASE_BASENAME: GeckoRush-2.6
+      RELEASE_VERSION: "2.7.0"
+      RELEASE_BUILD: "9"
+      RELEASE_TAG: v2.7.0
+      RELEASE_BASENAME: GeckoRush-2.7
     defaults:
       run:
         shell: bash

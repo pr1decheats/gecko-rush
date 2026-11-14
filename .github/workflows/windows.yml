@@ -1,4 +1,4 @@
-name: Verify and publish Windows 2.6 (manual)
+name: Verify and publish Windows 2.7 (manual)
 
 on:
   workflow_dispatch:
@@ -32,16 +32,21 @@ jobs:
           $output = Join-Path $env:RUNNER_TEMP 'gecko-windows-release'
           New-Item -ItemType Directory -Force $output | Out-Null
           "WINDOWS_OUTPUT=$output" >> $env:GITHUB_ENV
-          python .github/assemble_release.py --manifest .github/release-assets/windows/manifest.json --output "$output/GeckoRush-2.6-Windows.zip"
+          python .github/assemble_release.py --manifest .github/release-assets/windows/manifest.json --output "$output/GeckoRush-2.7-Windows.zip"
           if ($LASTEXITCODE -ne 0) { throw 'Windows ZIP assembly failed' }
-          python .github/assemble_release.py --manifest .github/release-assets/android/manifest.json --output "$output/GeckoRush-2.6.apk"
+          python .github/assemble_release.py --manifest .github/release-assets/android/manifest.json --output "$output/GeckoRush-2.7.apk"
           if ($LASTEXITCODE -ne 0) { throw 'Android comparison assembly failed' }
-          Expand-Archive -LiteralPath "$output/GeckoRush-2.6-Windows.zip" -DestinationPath "$output/app"
+          Expand-Archive -LiteralPath "$output/GeckoRush-2.7-Windows.zip" -DestinationPath "$output/app"
 
       - name: Verify actual native PE metadata and all game scripts
         run: |
           $ErrorActionPreference = 'Stop'
-          python .github/verify_windows.py --exe "$env:WINDOWS_OUTPUT/app/GeckoRush.exe" --apk "$env:WINDOWS_OUTPUT/GeckoRush-2.6.apk" --apk-sha256 6294e5f4a0c67f98f6f8a20fe8f942429f74e0115b8c56dc45cfb594d59178c5 | Tee-Object -FilePath "$env:WINDOWS_OUTPUT/windows-package-verification.json"
+          $manifest = Get-Content '.github/release-assets/android/manifest.json' -Raw | ConvertFrom-Json
+          if ($manifest.version -ne '2.7.0' -or $manifest.filename -ne 'GeckoRush-2.7.apk' -or $manifest.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw 'Android manifest does not describe the frozen 2.7 comparison release'
+          }
+          $apkSha256 = $manifest.sha256
+          python .github/verify_windows.py --exe "$env:WINDOWS_OUTPUT/app/GeckoRush.exe" --apk "$env:WINDOWS_OUTPUT/GeckoRush-2.7.apk" --apk-sha256 $apkSha256 | Tee-Object -FilePath "$env:WINDOWS_OUTPUT/windows-package-verification.json"
           if ($LASTEXITCODE -ne 0) { throw 'Windows package verification failed' }
 
       - name: Launch the exact release EXE on Windows
@@ -63,7 +68,7 @@ jobs:
           }
           # Official release templates disable path overrides, so --script is
           # intentionally ignored and --main-pack is rejected by Godot itself.
-          # The exact exported pack's 67 resource/FPS checks run separately
+          # Exported pack animation/resource/FPS checks run separately
           # under the editor on Linux; this job executes the real release EXE.
           $package = Get-Content "$env:WINDOWS_OUTPUT/windows-package-verification.json" -Raw | ConvertFrom-Json
           $report = @{
@@ -75,8 +80,8 @@ jobs:
             }
           }
           $report | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 "$env:WINDOWS_OUTPUT/windows-native-verification.json"
-          $zipHash = (Get-FileHash "$env:WINDOWS_OUTPUT/GeckoRush-2.6-Windows.zip" -Algorithm SHA256).Hash.ToLower()
-          "$zipHash  GeckoRush-2.6-Windows.zip" | Set-Content -Encoding utf8 "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
+          $zipHash = (Get-FileHash "$env:WINDOWS_OUTPUT/GeckoRush-2.7-Windows.zip" -Algorithm SHA256).Hash.ToLower()
+          "$zipHash  GeckoRush-2.7-Windows.zip" | Set-Content -Encoding utf8 "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
 
       - name: Keep verified Windows release and evidence
         if: always()
@@ -87,17 +92,17 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           path: |
-            ${{ env.WINDOWS_OUTPUT }}/GeckoRush-2.6-Windows.zip
+            ${{ env.WINDOWS_OUTPUT }}/GeckoRush-2.7-Windows.zip
             ${{ env.WINDOWS_OUTPUT }}/windows-native-verification.json
             ${{ env.WINDOWS_OUTPUT }}/Windows-SHA256SUMS.txt
             ${{ env.WINDOWS_OUTPUT }}/native-windows.log
 
-      - name: Add Windows files to the existing 2.6 release
+      - name: Add Windows files to the existing 2.7 release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release view v2.6.0 --repo $env:GITHUB_REPOSITORY --json isDraft,tagName
+          gh release view v2.7.0 --repo $env:GITHUB_REPOSITORY --json isDraft,tagName
           if ($LASTEXITCODE -ne 0) { throw 'Existing mobile release was not found' }
-          gh release upload v2.6.0 --repo $env:GITHUB_REPOSITORY "$env:WINDOWS_OUTPUT/GeckoRush-2.6-Windows.zip" "$env:WINDOWS_OUTPUT/windows-native-verification.json" "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
+          gh release upload v2.7.0 --repo $env:GITHUB_REPOSITORY "$env:WINDOWS_OUTPUT/GeckoRush-2.7-Windows.zip" "$env:WINDOWS_OUTPUT/windows-native-verification.json" "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
           if ($LASTEXITCODE -ne 0) { throw 'Windows release asset upload failed; existing assets were not overwritten' }

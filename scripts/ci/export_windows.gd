@@ -20,7 +20,7 @@ func _initialize() -> void:
 		return
 	var options := windows + ".options"
 	var version := str(ProjectSettings.get_setting("application/config/version"))
-	var build := str(config.get_value("preset.0.options", "version/code", 8))
+	var build := str(config.get_value("preset.0.options", "version/code", 9))
 	config.set_value(windows, "name", "Windows")
 	config.set_value(options, "binary_format/architecture", "x86_64")
 	config.set_value(options, "binary_format/embed_pck", true)

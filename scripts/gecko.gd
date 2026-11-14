@@ -1,31 +1,22 @@
 class_name GeckoVisual
 extends Node2D
-## Illustrated character sprites use a shared deformable mesh, with a quiet
-## tail, alternating planted limbs, eyelids, and a continuous waking pose.
-## Textures and mesh geometry are cached; animation never edits image pixels.
+## Compact articulated character: one continuous body and an explicit head,
+## four jointed limbs and a flexible tail. Every skin uses this same live rig.
+## No painted full-body sprite is stretched to simulate walking.
 const PIXEL_SCALE := 1.6
 const ORIGIN := Vector2(32, 55)
-const GROUND_FEET_Y := 90.0
+const GROUND_FEET_Y := 95.0
 const ELECTRO_DURATION := 1.4
 const ASH_COUNT := 44
-static var _frames: Dictionary = {}
-static var _skin_ground_frames: Dictionary = {}
-const DETAILED_SHADER: Shader = preload("res://assets/characters/rig.gdshader")
-const DETAILED_CATALOG := "res://assets/characters/catalog.json"
-static var _detailed_catalog: Dictionary = {}
-static var _detailed_textures: Dictionary = {}
-static var _detailed_meshes: Dictionary = {}
-var _detailed_root: Node2D
-var _detailed_run: MeshInstance2D
-var _detailed_sleep: MeshInstance2D
-var _detailed_run_key := ""
-var _detailed_sleep_key := ""
-var _detailed_mouth := Vector2.ZERO
-var _detailed_active := false
+const RENDERER_REVISION := 27
+const MAX_TONGUE_REACH := 105.0
+const TONGUE_EXTEND_SECONDS := 0.055
+const TONGUE_RETRACT_SECONDS := 0.17
+var _eat_offset := Vector2.ZERO
 # Body colors and costume accents share a small, deterministic palette. The
 # artwork is articulated with the original rig; skins never change collisions.
 const SKIN_PALETTES := {
-	"standard_green": ["192f32", "315c44", "70ad50", "aad969", "d8e99b", "e5f59b"],
+	"standard_green": ["243b2f", "416d44", "7db64d", "b5d974", "e2edb5", "e5ca73"],
 	"neon_pulse": ["101b37", "293052", "36d9de", "aeffff", "f4c5ff", "fc53df"],
 	"desert_wanderer": ["3d2c27", "87603f", "c69c62", "f0cf8b", "f8e2ae", "bd483f"],
 	"shadow_jumper": ["151124", "302642", "675084", "9b7fc3", "c5acd9", "bf8cff"],
@@ -50,7 +41,7 @@ const SKIN_PALETTES := {
 var skin_id := "standard_green"
 var _skin_palette: Array = SKIN_PALETTES["standard_green"]
 const PALETTE_INDEX := {"ink": 0, "deep": 1, "skin": 2, "lit": 3, "pale": 4, "accent": 5}
-var _skin_colors: Array[Color] = [Color("192f32"), Color("315c44"), Color("70ad50"), Color("aad969"), Color("d8e99b"), Color("e5f59b")]
+var _skin_colors: Array[Color] = [Color("243b2f"), Color("416d44"), Color("7db64d"), Color("b5d974"), Color("e2edb5"), Color("e5ca73")]
 var mode := "idle"
 var side := -1
 var jump_progress := 0.0
@@ -77,12 +68,8 @@ var _ash_velocities := PackedVector2Array()
 var _ash_sizes := PackedFloat32Array()
 
 func _ready() -> void:
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	if _frames.is_empty():
-		for kind in ["idle", "run", "jump", "ground"]:
-			for blink in range(2):
-				_frames["%s%d" % [kind, blink]] = _make_frame(kind, blink == 1)
-	_ensure_detailed_nodes()
+	# Every visible pose is drawn from the rig, including sleep and waking.
+	queue_redraw()
 
 func set_skin(id: String) -> void:
 	# It is valid to configure a shop preview before adding it to the tree.
@@ -90,8 +77,6 @@ func set_skin(id: String) -> void:
 	_skin_palette = SKIN_PALETTES[skin_id]
 	for i in range(6):
 		_skin_colors[i] = Color(_skin_palette[i])
-	_detailed_run_key = ""
-	_detailed_sleep_key = ""
 	queue_redraw()
 
 func _c(name: String) -> Color:
@@ -102,26 +87,6 @@ func _c(name: String) -> Color:
 	elif skin_id == "ghost_dragon" and index in [1, 2, 3]:
 		color.a = 0.93
 	return color
-
-func _ground_texture(blink: int) -> Texture2D:
-	if skin_id == "standard_green":
-		return _frames["ground%d" % blink]
-	var key := skin_id + str(blink)
-	if not _skin_ground_frames.has(key):
-		var image := Image.create(64, 120, false, Image.FORMAT_RGBA8)
-		image.fill(Color.TRANSPARENT)
-		_make_ground_body(image, blink == 1)
-		var names := ["ink", "deep", "skin", "lit", "pale"]
-		var replacements: Dictionary = {}
-		for i in range(5):
-			replacements[Color(SKIN_PALETTES["standard_green"][i]).to_rgba32()] = _c(names[i])
-		for y in range(image.get_height()):
-			for x in range(image.get_width()):
-				var pixel := image.get_pixel(x, y)
-				if replacements.has(pixel.to_rgba32()):
-					image.set_pixel(x, y, replacements[pixel.to_rgba32()])
-		_skin_ground_frames[key] = ImageTexture.create_from_image(image)
-	return _skin_ground_frames[key]
 
 func _process(delta: float) -> void:
 	_clock += delta
@@ -141,13 +106,15 @@ func _process(delta: float) -> void:
 	# Speed changes then remain continuous rather than skipping entire strides.
 	_visual_speed_factor = lerpf(_visual_speed_factor, clampf(run_speed_factor, 0.5, 3.0), 1.0 - exp(-delta * 3.5))
 	var running: bool = mode == "run" or (mode in ["wake_climb", "climb_launch"] and launch_progress >= 0.58)
-	var stride_hz := clampf(1.45 + (_visual_speed_factor - 1.0) * 0.26, 1.25, 1.97) if running else 0.22
+	var stride_hz := clampf(1.65 + (_visual_speed_factor - 1.0) * 0.32, 1.45, 2.29) if running else 0.22
 	var tail_hz := clampf(0.38 + (_visual_speed_factor - 1.0) * 0.075, 0.34, 0.53) if running else (0.055 if mode == "sleep" else 0.20)
 	_stride_phase = fposmod(_stride_phase + delta * TAU * stride_hz, TAU)
 	_tail_phase = fposmod(_tail_phase + delta * TAU * tail_hz, TAU)
 	_landing = move_toward(_landing, 0.0, delta * 7.0)
 	_launch = move_toward(_launch, 0.0, delta * 10.0)
 	_hurt = move_toward(_hurt, 0.0, delta * 2.5)
+	if mode in ["jump", "hit", "sleep", "ground_idle"]:
+		_eat_clock = -1.0
 	if _eat_clock >= 0:
 		_eat_clock += delta
 		if _eat_clock >= 0.23:
@@ -165,6 +132,7 @@ func reset_animation() -> void:
 	_hurt = 0.0
 	_eat_clock = -1.0
 	_eat_world = Vector2.ZERO
+	_eat_offset = Vector2.ZERO
 	_electro_clock = -1.0
 	_electro_direction = 1.0
 	_electro_angle = 0.0
@@ -233,109 +201,67 @@ func hurt() -> void:
 	_eat_clock = -1.0
 
 func eat_to(local_target: Vector2) -> void:
-	if mode != "jump" and not is_eating():
-		_eat_world = position + local_target
-		_eat_clock = 0.0
+	if mode in ["jump", "hit", "electrocuted", "sleep", "ground_idle"] or is_eating() or not local_target.is_finite():
+		return
+	# Keep the captured insect relative to the moving mouth. A world-fixed
+	# point would trail thousands of pixels behind the runner at high speed.
+	_eat_offset = (local_target - get_mouth_position()).limit_length(MAX_TONGUE_REACH)
+	_eat_world = position + local_target # retained for old save/debug consumers
+	_eat_clock = 0.0
+
+func get_render_pose() -> Dictionary:
+	if mode in ["sleep", "ground_idle"]:
+		return _sleep_pose()
+	if mode in ["wake_climb", "climb_launch"]:
+		return _wake_pose()
+	return _profile_pose()
+
+func _character_transform() -> Transform2D:
+	var direction := float(-side)
+	var angle := 0.0
+	if mode == "jump":
+		angle = -float(side) * sin(jump_progress * PI) * 1.08
+		if jump_progress > 0.72:
+			direction = float(side)
+	var squash := _landing * 0.06
+	var body_scale := Vector2(direction * (1.0 + squash), stretch * (1.0 - squash + _launch * 0.045)) * PIXEL_SCALE
+	return Transform2D(angle, body_scale, 0.0, Vector2.ZERO)
+
+func get_mouth_position() -> Vector2:
+	var pose := get_render_pose()
+	return _character_transform() * (_head_point(pose, Vector2(-14.0, 5.0)) - ORIGIN)
+
+func get_tongue_geometry() -> Dictionary:
+	var mouth := get_mouth_position()
+	var active := _eat_clock >= 0.0 and _eat_clock < TONGUE_RETRACT_SECONDS and mode in ["run", "idle", "wake_climb", "climb_launch"]
+	var reach := 0.0
+	if active:
+		reach = smoothstep(0.0, TONGUE_EXTEND_SECONDS, _eat_clock) if _eat_clock <= TONGUE_EXTEND_SECONDS else 1.0 - smoothstep(TONGUE_EXTEND_SECONDS, TONGUE_RETRACT_SECONDS, _eat_clock)
+	var tip := mouth + _eat_offset * clampf(reach, 0.0, 1.0)
+	var middle := mouth.lerp(tip, 0.50) + Vector2(0.0, sin(PI * reach) * 2.3)
+	return {"active": active, "mouth": mouth, "tip": tip, "points": PackedVector2Array([mouth, middle, tip]), "caught": active and _eat_clock >= TONGUE_EXTEND_SECONDS}
+
+func _draw_tongue() -> void:
+	var geometry := get_tongue_geometry()
+	if not bool(geometry["active"]):
+		return
+	var points: PackedVector2Array = geometry["points"]
+	draw_polyline(points, Color("7f4253"), 3.5, true)
+	draw_polyline(points, Color("efa1ad"), 1.6, true)
+	if bool(geometry["caught"]):
+		var fly: Vector2 = geometry["tip"]
+		draw_ellipse(fly + Vector2(-1.8, -1.6), 2.8, 1.2, Color("cadbd4"), true, -1.0, true)
+		draw_ellipse(fly + Vector2(1.8, -1.6), 2.8, 1.2, Color("cadbd4"), true, -1.0, true)
+		draw_circle(fly, 2.3, Color("263630"), true, -1.0, true)
 
 func is_eating() -> bool:
 	return _eat_clock >= 0.0
 
-func _rect(im: Image, x: int, y: int, w: int, h: int, color: Color) -> void:
-	var r := Rect2i(x, y, w, h).intersection(Rect2i(0, 0, 64, 120))
-	if r.has_area():
-		im.fill_rect(r, color)
-
-func _line(im: Image, a: Vector2, b: Vector2, color: Color, width: int = 1) -> void:
-	var count := maxi(1, int(a.distance_to(b) * 1.5))
-	for i in range(count + 1):
-		var p := a.lerp(b, float(i) / count).round()
-		_rect(im, int(p.x) - width / 2, int(p.y) - width / 2, width, width, color)
-
-func _oval(im: Image, center: Vector2, radius: Vector2, color: Color) -> void:
-	for y in range(int(center.y - radius.y), int(center.y + radius.y) + 1):
-		var f := 1.0 - pow((float(y) - center.y) / radius.y, 2.0)
-		if f >= 0:
-			var extent := int(sqrt(f) * radius.x)
-			_rect(im, int(center.x) - extent, y, extent * 2 + 1, 1, color)
-
-func _make_frame(kind: String, blink: bool) -> Texture2D:
-	var im := Image.create(64, 120, false, Image.FORMAT_RGBA8)
-	im.fill(Color.TRANSPARENT)
-	if kind == "ground":
-		_make_ground_body(im, blink)
-		return ImageTexture.create_from_image(im)
-	var ink := Color("192f32")
-	var deep := Color("315c44")
-	var skin := Color("70ad50")
-	var lit := Color("aad969")
-	var pale := Color("d8e99b")
-	# Narrow silhouette; the pale belly faces the wall (left).
-	_oval(im, Vector2(34, 53), Vector2(12, 24), ink)
-	_oval(im, Vector2(34, 52), Vector2(10, 22), deep)
-	_oval(im, Vector2(32, 51), Vector2(8, 21), skin)
-	_oval(im, Vector2(29, 51), Vector2(3, 19), pale)
-	_line(im, Vector2(34, 34), Vector2(36, 68), lit, 3)
-	for row in range(5):
-		_rect(im, 38 + row % 2, 38 + row * 6, 4, 3, deep)
-		_rect(im, 35, 41 + row * 6, 2, 1, pale)
-	# One eye and a pointed upward muzzle make the side view unambiguous.
-	_oval(im, Vector2(32, 27), Vector2(13, 16), ink)
-	_oval(im, Vector2(31, 26), Vector2(11, 14), skin)
-	_rect(im, 23, 11, 9, 6, ink)
-	_rect(im, 23, 13, 8, 5, lit)
-	_rect(im, 20, 18, 6, 11, ink)
-	_rect(im, 22, 18, 5, 10, pale)
-	_line(im, Vector2(26, 32), Vector2(32, 35), deep, 2)
-	_rect(im, 23, 18, 2, 2, deep)
-	_rect(im, 33, 13, 4, 3, lit)
-	_oval(im, Vector2(35, 24), Vector2(6, 7), ink)
-	if blink:
-		_rect(im, 30, 24, 10, 2, lit)
-	else:
-		_oval(im, Vector2(35, 23), Vector2(4, 5), Color("f7f5d7"))
-		_rect(im, 33, 19, 3, 7, ink)
-		_rect(im, 33, 19, 2, 2, Color.WHITE)
-	return ImageTexture.create_from_image(im)
-
-func _make_ground_body(im: Image, blink: bool) -> void:
-	var ink := Color("192f32")
-	var deep := Color("315c44")
-	var skin := Color("70ad50")
-	var lit := Color("aad969")
-	var pale := Color("d8e99b")
-	_oval(im, Vector2(32, 77), Vector2(15, 23), ink)
-	_oval(im, Vector2(32, 76), Vector2(13, 21), deep)
-	_oval(im, Vector2(31, 74), Vector2(12, 20), skin)
-	_oval(im, Vector2(32, 79), Vector2(8, 15), pale)
-	_oval(im, Vector2(32, 58), Vector2(11, 11), skin)
-	_oval(im, Vector2(32, 44), Vector2(22, 18), ink)
-	_oval(im, Vector2(32, 43), Vector2(20, 16), skin)
-	_oval(im, Vector2(32, 51), Vector2(18, 9), lit)
-	for x: int in [18, 46]:
-		_oval(im, Vector2(x, 40), Vector2(8, 10), ink)
-		if blink:
-			_rect(im, x - 6, 39, 13, 3, lit)
-		else:
-			_oval(im, Vector2(x, 39), Vector2(6, 8), Color("f7f5d7"))
-			_rect(im, x - 1, 33, 3, 12, ink)
-			_rect(im, x - 2, 33, 2, 3, Color.WHITE)
-	_rect(im, 24, 49, 2, 2, deep)
-	_rect(im, 39, 49, 2, 2, deep)
-	_line(im, Vector2(20, 55), Vector2(27, 57), deep, 1)
-	_line(im, Vector2(27, 57), Vector2(37, 57), deep, 1)
-	_line(im, Vector2(37, 57), Vector2(44, 55), deep, 1)
-	for i in range(4):
-		_rect(im, 26 + i * 4, 30 + i % 2 * 3, 2, 2, lit)
-		_rect(im, 21, 67 + i * 6, 2, 3, deep)
-		_rect(im, 42, 67 + i * 6, 2, 3, deep)
-		_rect(im, 29, 70 + i * 6, 6, 1, lit)
-
 func _pixel_ellipse(at: Vector2, radius: Vector2, color: Color) -> void:
-	var polygon := PackedVector2Array()
-	for i in range(12):
-		var angle := TAU * float(i) / 12.0
-		polygon.append(at - ORIGIN + Vector2(cos(angle), sin(angle)) * radius)
-	draw_colored_polygon(polygon, color)
+	if skin_id == "pixel_gecko":
+		draw_rect(Rect2((at - ORIGIN - radius).round(), (radius * 2.0).round()), color)
+	else:
+		draw_ellipse(at - ORIGIN, radius.x, radius.y, color, true, -1.0, true)
 
 func _segment(a: Vector2, b: Vector2, width_a: float, width_b: float, color: Color) -> void:
 	var normal := (b - a).normalized().orthogonal()
@@ -432,8 +358,8 @@ func _neck(pose: Dictionary, width: float, color: Color) -> void:
 
 func _rotated_ellipse(at: Vector2, radius: Vector2, angle: float, color: Color) -> void:
 	var polygon := PackedVector2Array()
-	for i in range(12):
-		var a := TAU * float(i) / 12.0
+	for i in range(32):
+		var a := TAU * float(i) / 32.0
 		polygon.append(at - ORIGIN + (Vector2(cos(a), sin(a)) * radius).rotated(angle))
 	draw_colored_polygon(polygon, color)
 
@@ -441,77 +367,105 @@ func _head_point(pose: Dictionary, offset: Vector2) -> Vector2:
 	var head: Vector2 = pose["head"]
 	return head + offset.rotated(float(pose["head_angle"]))
 
+func _body_patch(pose: Dictionary, from_u: float, to_u: float, side: float, half_width: float, color: Color) -> void:
+	var left := PackedVector2Array()
+	var right := PackedVector2Array()
+	for i in range(17):
+		var u := lerpf(from_u, to_u, float(i) / 16.0)
+		var center := _body_point(pose, u)
+		var normal := _body_normal(pose, u)
+		var w := _body_width(pose, u)
+		left.append(center - ORIGIN + normal * w * (side + half_width))
+		right.append(center - ORIGIN + normal * w * (side - half_width))
+	for i in range(right.size() - 1, -1, -1):
+		left.append(right[i])
+	var outline := Geometry2D.convex_hull(left)
+	if outline.size() > 3:
+		outline.remove_at(outline.size() - 1)
+		draw_colored_polygon(outline, color)
+
 func _draw_pose_body(pose: Dictionary, tint: Color, blink: int, include_head: bool = true) -> void:
 	var ink := _c("ink") * tint
 	var deep := _c("deep") * tint
 	var skin := _c("skin") * tint
-	var lit := _c("lit") * tint
-	var pale := _c("pale") * tint
-	# Neck and hips overlap the same torso silhouette at every wake fraction.
-	# Surface details are inset along the local rib normal, so no belly texture
-	# sticks out when the spine changes from a C shape to a vertical profile.
 	_neck(pose, 15.0, ink)
 	_body_ribbon(pose, 1.0, Vector2.ZERO, ink)
-	_neck(pose, 11.4, deep)
-	_body_ribbon(pose, 0.87, Vector2.ZERO, deep)
-	_neck(pose, 9.6, skin)
-	_body_ribbon(pose, 0.73, Vector2(-0.7, -0.3), skin)
-	var previous := Vector2.ZERO
-	for i in range(11):
-		var u := 0.20 + float(i) * 0.058
-		var point := _body_point(pose, u) + _body_normal(pose, u) * _body_width(pose, u) * 0.35
-		if i > 0:
-			_segment(previous, point, 3.5, 3.5, pale)
-		_pixel_ellipse(point, Vector2(1.75, 1.75), pale)
-		previous = point
-	for i in range(5):
-		var u := 0.23 + float(i) * 0.13
-		var point := _body_point(pose, u)
+	_neck(pose, 11.5, deep)
+	_body_ribbon(pose, 0.88, Vector2.ZERO, deep)
+	_neck(pose, 10.0, skin)
+	_body_ribbon(pose, 0.77, Vector2(-0.35, -0.20), skin)
+	# Inset patches follow the actual curved spine; none can peel away from
+	# the body when it curls. The belly is a quiet continuous surface.
+	_body_patch(pose, 0.13, 0.92, 0.20, 0.24, _c("lit") * tint)
+	_body_patch(pose, 0.18, 0.90, 0.37, 0.18, _c("pale") * tint)
+	for i in range(6):
+		var u := 0.22 + float(i) * 0.11
+		var center := _body_point(pose, u)
 		var normal := _body_normal(pose, u)
-		_pixel_ellipse(point - normal * _body_width(pose, u) * 0.43, Vector2(2.0, 1.5), deep)
-		_pixel_ellipse(point, Vector2(1.5, 0.65), lit)
+		var w := _body_width(pose, u)
+		_pixel_ellipse(center - normal * w * 0.40, Vector2(1.75, 1.10), deep)
+		_pixel_ellipse(center - normal * w * 0.14 + Vector2(0.0, -1.4), Vector2(0.85, 0.70), _c("lit") * tint)
 	_draw_costume_body(pose, tint)
 	if include_head:
 		_draw_pose_head(pose, tint, blink)
 
-func _draw_pose_head(pose: Dictionary, tint: Color, blink: int) -> void:
+func _blink_amount() -> float:
+	var phase := fposmod(_clock, 4.1)
+	return smoothstep(3.92, 3.99, phase) * (1.0 - smoothstep(4.03, 4.10, phase))
+
+func _head_contour(pose: Dictionary, factor: float, offset: Vector2) -> PackedVector2Array:
+	# Rounded, compact side profile: a short muzzle, cheek and brow. The head
+	# stays an independent rigid part instead of distorting an illustrated eye.
+	var knots := [Vector2(-4, -16), Vector2(-11, -12), Vector2(-16, -7), Vector2(-18, -1),
+		Vector2(-15, 6), Vector2(-6, 11), Vector2(3, 13), Vector2(12, 8), Vector2(15, 0), Vector2(12, -10), Vector2(5, -16)]
+	var result := PackedVector2Array()
+	for i in range(knots.size()):
+		var a: Vector2 = knots[(i - 1 + knots.size()) % knots.size()]
+		var b: Vector2 = knots[i]
+		var c: Vector2 = knots[(i + 1) % knots.size()]
+		var d: Vector2 = knots[(i + 2) % knots.size()]
+		for j in range(4):
+			var t := float(j) / 4.0
+			var point := 0.5 * ((2.0 * b) + (-a + c) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t * t + (-a + 3.0 * b - 3.0 * c + d) * t * t * t)
+			result.append(_head_point(pose, point * factor + offset) - ORIGIN)
+	return result
+
+func _draw_pose_head(pose: Dictionary, tint: Color, _blink: int) -> void:
 	var ink := _c("ink") * tint
-	var deep := _c("deep") * tint
 	var skin := _c("skin") * tint
-	var lit := _c("lit") * tint
-	var pale := _c("pale") * tint
-	var head: Vector2 = pose["head"]
+	var deep := _c("deep") * tint
 	var angle := float(pose["head_angle"])
-	# One closed contour includes the muzzle. All cheek/eyelid details fit
-	# inside it, so a turned head cannot expose floating highlight pieces.
-	var contour := PackedVector2Array([Vector2(-4, -17), Vector2(-8, -16), Vector2(-11, -13),
-		Vector2(-13, -9), Vector2(-14, -4), Vector2(-13, 2), Vector2(-10, 8), Vector2(-5, 13),
-		Vector2(0, 15), Vector2(5, 14), Vector2(10, 10), Vector2(12, 5), Vector2(13, 0),
-		Vector2(11, -7), Vector2(7, -13), Vector2(2, -16)])
-	for layer in range(2):
-		var polygon := PackedVector2Array()
-		for point in contour:
-			polygon.append(head - ORIGIN + (point * (1.0 if layer == 0 else 0.86)).rotated(angle))
-		draw_colored_polygon(polygon, ink if layer == 0 else skin)
-	_rotated_ellipse(_head_point(pose, Vector2(-7, -8)), Vector2(4.4, 5.8), angle, lit)
-	_rotated_ellipse(_head_point(pose, Vector2(-8, 0)), Vector2(3.1, 6.0), angle, pale)
-	_segment(_head_point(pose, Vector2(-6, 6)), _head_point(pose, Vector2(0, 9)), 1.5, 1.2, deep)
-	_pixel_ellipse(_head_point(pose, Vector2(-8, -7)), Vector2(1.0, 1.0), deep)
-	var eye := _head_point(pose, Vector2(3, -3))
-	var openness := float(pose["eyes"])
-	if blink == 1 or openness < 0.08:
-		# A relaxed eyelid belongs to the cheek, rather than a black empty socket.
-		_rotated_ellipse(eye, Vector2(5.5, 5.0), angle, skin)
+	draw_colored_polygon(_head_contour(pose, 1.0, Vector2.ZERO), ink)
+	draw_colored_polygon(_head_contour(pose, 0.91, Vector2(-0.2, -0.3)), deep)
+	draw_colored_polygon(_head_contour(pose, 0.84, Vector2(-0.7, -0.6)), skin)
+	_rotated_ellipse(_head_point(pose, Vector2(-5.0, -8.0)), Vector2(5.5, 6.0), angle, _c("lit") * tint)
+	_rotated_ellipse(_head_point(pose, Vector2(-8.7, 3.2)), Vector2(6.4, 3.5), angle - 0.10, _c("lit").lerp(_c("pale"), 0.55) * tint)
+	# A short smile and one dark nostril define the muzzle at game size.
+	var mouth := [_head_point(pose, Vector2(-14.0, 5.0)), _head_point(pose, Vector2(-7.0, 8.1)), _head_point(pose, Vector2(-1.3, 8.8))]
+	for i in range(2):
+		_segment(mouth[i], mouth[i + 1], 0.9, 0.8, deep)
+	_pixel_ellipse(_head_point(pose, Vector2(-14.0, -1.2)), Vector2(0.85, 0.95), ink)
+	for point: Vector2 in [Vector2(-3.8, -12.7), Vector2(-0.3, -14.0), Vector2(3.2, -13.4)]:
+		_pixel_ellipse(_head_point(pose, point), Vector2(0.9, 0.65), _c("lit") * tint)
+	var eye := _head_point(pose, Vector2(4.0, -4.6))
+	var openness := clampf(float(pose["eyes"]) * (1.0 - _blink_amount()), 0.0, 1.0)
+	_rotated_ellipse(eye, Vector2(7.0, 8.8), angle, deep)
+	_rotated_ellipse(eye + Vector2(-0.25, -0.40).rotated(angle), Vector2(6.0, 7.7), angle, _c("lit") * tint)
+	if openness < 0.045:
 		var lid_angle := angle + float(pose["curl"]) * PI * 0.5
-		_segment(eye + Vector2(-4, 0).rotated(lid_angle), eye + Vector2(0, 1).rotated(lid_angle), 1.5, 1.5, deep)
-		_segment(eye + Vector2(0, 1).rotated(lid_angle), eye + Vector2(4, 0).rotated(lid_angle), 1.5, 1.0, deep)
-		_segment(eye + Vector2(-3.5, -1.5).rotated(lid_angle), eye + Vector2(3.5, -1.5).rotated(lid_angle), 1.0, 1.0, lit)
+		var lid := PackedVector2Array()
+		for i in range(13):
+			var x := -5.0 + float(i) * 10.0 / 12.0
+			lid.append(eye - ORIGIN + Vector2(x, 1.0 + x * x * 0.035).rotated(lid_angle))
+		draw_polyline(lid, deep, 1.2, true)
 	else:
-		var surprise := float(pose["alert"])
-		_rotated_ellipse(eye, Vector2(6, 7 * openness), angle, ink)
-		_rotated_ellipse(eye + Vector2(0, -0.6).rotated(angle), Vector2(4.2 + surprise * 0.7, (5.2 + surprise * 0.6) * openness), angle, Color("f7f5d7") * tint)
-		_rotated_ellipse(_head_point(pose, Vector2(2, -3 - openness)), Vector2(1.6, 4.0 * openness), angle, ink)
-		_pixel_ellipse(_head_point(pose, Vector2(1.5, -3 - 3.0 * openness)), Vector2(1.1, 1.1), Color.WHITE * tint)
+		_rotated_ellipse(eye, Vector2(5.1, 6.8 * openness), angle, Color("fff9e4") * tint)
+		var iris := eye + Vector2(-0.9, -0.15).rotated(angle)
+		var iris_color := Color("947040") if skin_id == "standard_green" else _c("deep").lerp(_c("accent"), 0.45)
+		_rotated_ellipse(iris, Vector2(3.0, 4.8 * openness), angle, iris_color * tint)
+		_rotated_ellipse(iris, Vector2(1.55, 4.0 * openness), angle, Color("1c3027") * tint)
+		_pixel_ellipse(iris + Vector2(-1.0, -2.3 * openness).rotated(angle), Vector2(1.20, 1.20 * openness), Color.WHITE * tint)
+		_pixel_ellipse(iris + Vector2(1.0, 1.8 * openness).rotated(angle), Vector2(0.55, 0.55 * openness), Color("ffe8aa") * tint)
 	_draw_costume_head(pose, tint)
 
 func _tail_point(pose: Dictionary, u: float) -> Vector2:
@@ -558,23 +512,6 @@ func _draw_pose_tail(pose: Dictionary, tint: Color) -> void:
 		var half_width := maxf(0.6, (1.0 - u) * lerpf(9.0, 14.0, curl) * 0.42)
 		_segment(point - tangent.orthogonal() * half_width, point + tangent.orthogonal() * half_width, 1.7, 1.7, _tail_mark_color(band, tint))
 
-func _draw_tail(tint: Color, ground: bool = false) -> void:
-	var ink := _c("ink") * tint
-	var deep := _c("deep") * tint
-	var skin := _c("skin") * tint
-	var previous := Vector2(35, 71)
-	if ground:
-		previous = Vector2(35, 90)
-	for k in range(1, 25):
-		var u := float(k) / 24.0
-		var point := Vector2(35.0 + sin(u * PI * 1.6 + _tail_phase) * u * 10.0, 71.0 + u * 42.0)
-		if ground:
-			point = Vector2(35.0 + u * 28.0, 90.0 + sin(u * PI) * 16.0 + sin(_tail_phase + u * 3.0) * u * 1.4)
-		var thickness := maxf(0.8, (1.0 - u) * 9.0)
-		_segment(previous, point, thickness + 1.5, thickness + 1.0, ink)
-		_segment(previous + Vector2(0, -0.5), point + Vector2(0, -0.5), thickness, maxf(0.7, thickness - 0.8), skin if k % 6 < 4 else deep)
-		previous = point
-
 func _draw_hand(foot: Vector2, back: bool, tint: Color, direction: Vector2 = Vector2.LEFT) -> void:
 	var ink := _c("ink") * tint
 	var skin := (_c("deep") if back else _c("skin")) * tint
@@ -589,12 +526,12 @@ func _draw_hand(foot: Vector2, back: bool, tint: Color, direction: Vector2 = Vec
 		var length := 7.0 - absf(float(toe) - 2.0) * 1.2
 		var joint := foot + reach * length * 0.55 + direction.orthogonal() * sin(spread) * 0.7
 		var pad := joint + reach.rotated(spread * 0.22) * length * 0.45
-		draw_line(foot - ORIGIN, joint - ORIGIN, ink, 2.5, false)
-		draw_line(joint - ORIGIN, pad - ORIGIN, ink, 2.2, false)
-		draw_line(foot - ORIGIN, joint - ORIGIN, lit, 1.25, false)
-		draw_line(joint - ORIGIN, pad - ORIGIN, lit, 1.1, false)
-		draw_rect(Rect2(pad - ORIGIN - Vector2(1.6, 1.5), Vector2(3.2, 3)), ink)
-		draw_rect(Rect2(pad - ORIGIN - Vector2(1, 1), Vector2(2, 2)), pale)
+		draw_line(foot - ORIGIN, joint - ORIGIN, ink, 2.5, true)
+		draw_line(joint - ORIGIN, pad - ORIGIN, ink, 2.2, true)
+		draw_line(foot - ORIGIN, joint - ORIGIN, lit, 1.25, true)
+		draw_line(joint - ORIGIN, pad - ORIGIN, lit, 1.1, true)
+		_pixel_ellipse(pad, Vector2(1.65, 1.50), ink)
+		_pixel_ellipse(pad + Vector2(-0.15, -0.25), Vector2(1.05, 0.90), pale)
 
 func _profile_limb_points(front: bool, back: bool, kind: String, amount: float = 1.0) -> PackedVector2Array:
 	var phase := _stride_phase + (PI if front == back else 0.0)
@@ -623,23 +560,51 @@ func _profile_limb_points(front: bool, back: bool, kind: String, amount: float =
 		foot = elbow + Vector2(-8.0, -7.0 if front else 6.0)
 	return PackedVector2Array([shoulder, elbow, foot])
 
+func _limb_ribbon(points: PackedVector2Array, widths: Vector3, color: Color) -> void:
+	var path := PackedVector2Array()
+	var profile := PackedFloat32Array()
+	var shoulder := points[0]
+	var elbow := points[1]
+	var foot := points[2]
+	var tangent := (foot - shoulder).normalized() * 3.2
+	# Two joined curves bend through the real elbow. Their shared tangent and
+	# one filled silhouette prevent both stick-like corners and separated joints.
+	for piece in range(2):
+		for i in range(9):
+			if piece == 1 and i == 0:
+				continue
+			var t := float(i) / 8.0
+			if piece == 0:
+				path.append(shoulder.bezier_interpolate(shoulder.lerp(elbow, 0.55), elbow - tangent, elbow, t))
+				profile.append(lerpf(widths.x, widths.y, t))
+			else:
+				path.append(elbow.bezier_interpolate(elbow + tangent, elbow.lerp(foot, 0.52), foot, t))
+				profile.append(lerpf(widths.y, widths.z, t))
+	var left := PackedVector2Array()
+	var right := PackedVector2Array()
+	for i in range(path.size()):
+		var normal := (path[mini(i + 1, path.size() - 1)] - path[maxi(i - 1, 0)]).normalized().orthogonal()
+		left.append(path[i] - ORIGIN + normal * profile[i] * 0.5)
+		right.append(path[i] - ORIGIN - normal * profile[i] * 0.5)
+	# A triangle strip remains valid even when a tightly folded elbow makes
+	# its inside edge cross. Whole-outline triangulation is not valid there.
+	var colors := PackedColorArray([color, color, color])
+	for i in range(path.size() - 1):
+		draw_primitive(PackedVector2Array([left[i], left[i + 1], right[i]]), colors, PackedVector2Array())
+		draw_primitive(PackedVector2Array([right[i], left[i + 1], right[i + 1]]), colors, PackedVector2Array())
+	_pixel_ellipse(shoulder, Vector2.ONE * widths.x * 0.5, color)
+	_pixel_ellipse(foot, Vector2.ONE * widths.z * 0.5, color)
+
 func _draw_limb_chain(points: PackedVector2Array, front: bool, back: bool, tint: Color, hand_direction: Vector2 = Vector2.LEFT, fold: float = 0.0, hand_openness: float = 1.0) -> void:
 	var ink := _c("ink") * tint
 	var skin := (_c("deep") if back else _c("skin")) * tint
 	var lit := (_c("skin") if back else _c("lit")) * tint
-	var shoulder := points[0]
-	var elbow := points[1]
-	var foot := points[2]
-	var thigh_width := lerpf(6.0 if front else 8.0, 5.0 if front else 7.5, fold)
-	var elbow_width := lerpf(5.2, 6.0, fold)
-	_segment(shoulder, elbow, thigh_width + 1.6, elbow_width, ink)
-	_pixel_ellipse(elbow, Vector2.ONE * lerpf(3.2, 3.0, fold), ink)
-	_segment(elbow, foot, elbow_width, lerpf(3.4, 4.8, fold), ink)
-	_segment(shoulder, elbow, thigh_width, lerpf(3.5, 4.0, fold), skin)
-	_pixel_ellipse(elbow, Vector2.ONE * lerpf(2.2, 2.0, fold), skin)
-	_segment(elbow, foot, lerpf(3.4, 4.0, fold), lerpf(2.0, 2.8, fold), skin)
-	_segment(shoulder + Vector2(0, -0.9), elbow + Vector2(0, -0.6), 1.5, 1.0, lit)
-	_draw_tucked_hand(foot, back, tint, hand_openness, hand_direction)
+	var thigh := lerpf(7.0 if front else 10.0, 6.0 if front else 8.8, fold)
+	_limb_ribbon(points, Vector3(thigh + 1.8, 6.1, 4.3), ink)
+	_limb_ribbon(points, Vector3(thigh, 4.4, 2.7), skin)
+	var sheen := PackedVector2Array([points[0] + Vector2(-0.6, -0.6), points[1] + Vector2(-0.5, -0.8), points[2] + Vector2(-0.4, -0.7)])
+	_limb_ribbon(sheen, Vector3(1.4, 1.0, 0.6), lit)
+	_draw_tucked_hand(points[2], back, tint, hand_openness, hand_direction)
 	_draw_costume_limb(points, back, tint)
 
 func _draw_limbs(back: bool, kind: String, tint: Color) -> void:
@@ -699,53 +664,17 @@ func _draw_wake(pose: Dictionary, blink: int, direction: float, tint: Color) -> 
 	_draw_costume_front(pose, tint)
 	draw_set_transform(Vector2.ZERO)
 
-func _draw_ground(tint: Color, blink: int, lean: float = 0.0, narrowing: float = 1.0) -> void:
-	draw_set_transform(Vector2.ZERO, lean, Vector2(PIXEL_SCALE * narrowing, PIXEL_SCALE))
-	var pose := _profile_pose()
-	pose["head"] = Vector2(32, 44)
-	pose["hip"] = Vector2(33, 92)
-	pose["chest"] = Vector2(32, 65)
-	pose["control"] = Vector2(32, 78)
-	pose["control2"] = Vector2(32, 78)
-	_draw_costume_back(pose, tint)
-	_draw_tail(tint, true)
-	var ink := _c("ink") * tint
-	var skin := _c("skin") * tint
-	var lit := _c("lit") * tint
-	for direction: int in [-1, 1]:
-		var hip := Vector2(32 + direction * 10, 84)
-		var knee := Vector2(32 + direction * 23, 94)
-		var foot := Vector2(32 + direction * 21, 104)
-		_segment(hip, knee, 9, 8, ink)
-		_segment(knee, foot, 7, 5, ink)
-		_segment(hip, knee, 6.8, 5.8, skin)
-		_segment(knee, foot, 4.8, 3, lit)
-		_draw_hand(foot, false, tint, Vector2(direction * 0.5, 1).normalized())
-	draw_texture_rect(_ground_texture(blink), Rect2(-ORIGIN + Vector2(0, sin(_clock * 1.6) * 0.5), Vector2(64, 120)), false, tint)
-	_draw_costume_body(pose, tint)
-	for direction: int in [-1, 1]:
-		var shoulder := Vector2(32 + direction * 11, 66)
-		var elbow := Vector2(32 + direction * 20, 77)
-		var hand := Vector2(32 + direction * 15, 95)
-		_segment(shoulder, elbow, 6, 5, ink)
-		_segment(elbow, hand, 5, 3.7, ink)
-		_segment(shoulder, elbow, 4.2, 3.2, skin)
-		_segment(elbow, hand, 3.2, 2, lit)
-		_draw_hand(hand, false, tint, Vector2(direction * 0.25, 1).normalized())
-	_draw_costume_head(pose, tint)
-	_draw_costume_front(pose, tint)
-	draw_set_transform(Vector2.ZERO)
-
 func _draw_profile(kind: String, blink: int, direction: float, angle: float, tint: Color, shift: Vector2 = Vector2.ZERO) -> void:
-	var squash := _landing * 0.10
-	var scale2 := Vector2(direction * (1.0 + squash), (1.0 - squash + _launch * 0.08) * stretch) * PIXEL_SCALE
+	var squash := _landing * 0.06
+	var scale2 := Vector2(direction * (1.0 + squash), (1.0 - squash + _launch * 0.045) * stretch) * PIXEL_SCALE
 	draw_set_transform(shift, angle, scale2)
 	var pose := _profile_pose()
 	_draw_costume_back(pose, tint)
 	_draw_pose_tail(pose, tint)
 	_draw_limbs(true, kind, tint)
-	_draw_pose_body(pose, tint, blink)
+	_draw_pose_body(pose, tint, blink, false)
 	_draw_limbs(false, kind, tint)
+	_draw_pose_head(pose, tint, blink)
 	_draw_costume_front(pose, tint)
 	draw_set_transform(Vector2.ZERO)
 
@@ -828,18 +757,13 @@ func _draw_electro() -> void:
 		draw_rect(Rect2(_ash_positions[i] - Vector2.ONE * size * 0.5, Vector2.ONE * size), ash)
 
 func _draw() -> void:
-	if _frames.is_empty():
-		return
-	if _sync_detailed_visual():
-		_draw_detailed_tongue()
-		return
 	if mode == "electrocuted":
 		_draw_electro()
 		return
 	var kind := "jump" if mode == "jump" else ("run" if mode == "run" else "idle")
-	var blink := 1 if fposmod(_clock, 4.1) > 3.96 else 0
+	var blink := 1 if _blink_amount() > 0.95 else 0
 	var direction := float(-side)
-	var angle := sin(_clock) * 0.025 if kind == "idle" else 0.0
+	var angle := 0.0
 	if kind == "jump":
 		angle = -float(side) * sin(jump_progress * PI) * 1.08
 		if jump_progress > 0.72:
@@ -847,28 +771,13 @@ func _draw() -> void:
 	var tint := Color.WHITE.lerp(Color("d0ecff"), night_amount * 0.1)
 	if mode == "hit":
 		tint = tint.lerp(Color("ff998e"), _hurt)
-	if mode == "sleep":
+	if mode in ["sleep", "ground_idle"]:
 		_draw_wake(_sleep_pose(), 1, direction, tint)
-	elif mode == "ground_idle":
-		_draw_ground(tint, blink)
 	elif mode in ["wake_climb", "climb_launch"]:
 		_draw_wake(_wake_pose(), blink, direction, tint)
 	else:
 		_draw_profile(kind, blink, direction, angle, tint)
-	if _eat_clock >= 0.0:
-		var mouth := Vector2(-float(-side) * 14.4, -59.2)
-		var target := _eat_world - position
-		var reach := smoothstep(0.0, 0.075, _eat_clock) if _eat_clock < 0.075 else 1.0 - smoothstep(0.075, 0.18, _eat_clock)
-		var tip := mouth.lerp(target, reach)
-		if _eat_clock < 0.18:
-			draw_line(mouth, tip, Color("713a63"), 5, false)
-			draw_line(mouth + Vector2(1, -1), tip, Color("ef8e9d"), 2, false)
-			var fly := target if _eat_clock < 0.075 else tip
-			draw_rect(Rect2(fly - Vector2(4, 3), Vector2(8, 6)), Color("172b3a"))
-			draw_rect(Rect2(fly + Vector2(-6, -5), Vector2(5, 3)), Color("c4e5df"))
-			draw_rect(Rect2(fly + Vector2(3, -5), Vector2(5, 3)), Color("c4e5df"))
-		elif int(_eat_clock * 70) % 2 == 0:
-			draw_rect(Rect2(mouth, Vector2(5, 3)), Color("ef8e9d"))
+	_draw_tongue()
 
 
 # Costume layers are expressed in the rig's local coordinates. In particular,
@@ -923,8 +832,16 @@ func _costume_cape(pose: Dictionary, color: Color, trim: Color, jagged: bool = f
 	var shoulder := upper - _body_normal(pose, 0.85) * 11.0 * folded
 	var points: Array = [upper, shoulder, edge]
 	if jagged:
-		points.append(edge.lerp(lower, 0.28) + Vector2(-2, -5) * folded)
-		points.append(edge.lerp(lower, 0.57) + Vector2(0, 3) * folded)
+		# Frayed hems use the cape's own basis. Fixed screen offsets turn the
+		# folded sleeping cape into a bow-tie polygon when its spine rotates.
+		var along := (lower - edge).normalized()
+		var inward := along.orthogonal()
+		if inward.dot(upper - edge.lerp(lower, 0.5)) < 0.0:
+			inward = -inward
+		var depth := minf(2.5 * folded * (1.0 - float(pose["curl"])), edge.distance_to(lower) * 0.08)
+		if depth > 0.20:
+			points.append(edge.lerp(lower, 0.28) + inward * depth)
+			points.append(edge.lerp(lower, 0.57) - inward * depth * 0.35)
 	points.append(lower)
 	_costume_polygon(points, _c("ink"))
 	_costume_polygon([upper.lerp(shoulder, 0.3), shoulder.lerp(edge, 0.12), edge.lerp(lower, 0.10), lower.lerp(upper, 0.10)], color)
@@ -1191,196 +1108,3 @@ func _draw_costume_front(pose: Dictionary, tint: Color) -> void:
 			else:
 				var pulse := 0.75 + 0.25 * sin(_clock * 1.2 + i * 2)
 				_star(point, (2.0 + float(i % 2)) * pulse, color)
-
-
-# Full-resolution character art.  The older drawing helpers above also supply
-# the brief electrical skeleton and a safe editor fallback when art is absent.
-func _ensure_detailed_nodes() -> void:
-	if is_instance_valid(_detailed_root):
-		return
-	_detailed_root = Node2D.new()
-	_detailed_root.name = "IllustratedCharacter"
-	_detailed_root.show_behind_parent = true
-	add_child(_detailed_root)
-	_detailed_run = MeshInstance2D.new()
-	_detailed_run.name = "ClimbingPose"
-	_detailed_run.material = ShaderMaterial.new()
-	(_detailed_run.material as ShaderMaterial).shader = DETAILED_SHADER
-	_detailed_root.add_child(_detailed_run)
-	_detailed_sleep = MeshInstance2D.new()
-	_detailed_sleep.name = "SleepingPose"
-	_detailed_sleep.material = ShaderMaterial.new()
-	(_detailed_sleep.material as ShaderMaterial).shader = DETAILED_SHADER
-	_detailed_root.add_child(_detailed_sleep)
-	_detailed_root.hide()
-
-func _detailed_entry() -> Dictionary:
-	if _detailed_catalog.is_empty() and FileAccess.file_exists(DETAILED_CATALOG):
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(DETAILED_CATALOG))
-		if parsed is Dictionary:
-			_detailed_catalog = parsed.get("skins", parsed)
-	var entry: Variant = _detailed_catalog.get(skin_id, {})
-	return entry if entry is Dictionary else {}
-
-func _vector_from_data(value: Variant, fallback: Vector2) -> Vector2:
-	if value is Array and value.size() >= 2:
-		return Vector2(float(value[0]), float(value[1]))
-	return fallback
-
-func _detailed_geometry(size: Vector2, anchor: Vector2) -> ArrayMesh:
-	var key := "%s:%s" % [size, anchor]
-	if _detailed_meshes.has(key):
-		return _detailed_meshes[key]
-	const COLUMNS := 24
-	const ROWS := 40
-	var vertices := PackedVector3Array()
-	var coordinates := PackedVector2Array()
-	var indices := PackedInt32Array()
-	for y in range(ROWS + 1):
-		for x in range(COLUMNS + 1):
-			var uv := Vector2(float(x) / COLUMNS, float(y) / ROWS)
-			var point := (uv - anchor) * size
-			vertices.append(Vector3(point.x, point.y, 0.0))
-			coordinates.append(uv)
-	for y in range(ROWS):
-		for x in range(COLUMNS):
-			var index := y * (COLUMNS + 1) + x
-			indices.append_array(PackedInt32Array([index, index + 1, index + COLUMNS + 2,
-				index, index + COLUMNS + 2, index + COLUMNS + 1]))
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_TEX_UV] = coordinates
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	_detailed_meshes[key] = mesh
-	return mesh
-
-func _configure_detailed_mesh(node: MeshInstance2D, data: Dictionary, asleep: bool) -> bool:
-	var path: String = str(data.get("texture", data.get("image", data.get("atlas", ""))))
-	var region_data: Variant = data.get("rect", data.get("region", data.get("slot_rect", [])))
-	if path.is_empty() or not region_data is Array or region_data.size() < 4:
-		return false
-	if not _detailed_textures.has(path):
-		if not ResourceLoader.exists(path):
-			return false
-		var resource: Resource = load(path)
-		if not resource is Texture2D:
-			return false
-		_detailed_textures[path] = resource
-	var texture: Texture2D = _detailed_textures[path]
-	var region := Rect2(float(region_data[0]), float(region_data[1]), float(region_data[2]), float(region_data[3]))
-	if region.size.x <= 0.0 or region.size.y <= 0.0:
-		return false
-	var height := float(data.get("display_height", 112.0 if asleep else 205.0))
-	var size := _vector_from_data(data.get("display_size"), Vector2(region.size.x / region.size.y * height, height))
-	var anchor := _vector_from_data(data.get("anchor"), Vector2(0.5, 1.0) if asleep else Vector2(0.30, 0.50))
-	var eye: Variant = data.get("eye", [])
-	if not eye is Array or eye.size() < 4:
-		var center := _vector_from_data(data.get("eye_center_uv", data.get("eye_center")), Vector2(0.62, 0.20))
-		var radius := _vector_from_data(data.get("eye_radius_uv", data.get("eye_radius")), Vector2(0.09, 0.065))
-		eye = [center.x, center.y, radius.x, radius.y]
-	node.mesh = _detailed_geometry(size, anchor)
-	node.texture = texture
-	node.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if skin_id == "pixel_gecko" else CanvasItem.TEXTURE_FILTER_LINEAR
-	node.position = _vector_from_data(data.get("offset"), Vector2(0.0, GROUND_FEET_Y) if asleep else Vector2.ZERO)
-	var shader := node.material as ShaderMaterial
-	shader.set_shader_parameter("atlas_rect", Vector4(region.position.x / texture.get_width(), region.position.y / texture.get_height(), region.size.x / texture.get_width(), region.size.y / texture.get_height()))
-	shader.set_shader_parameter("body_size", size)
-	shader.set_shader_parameter("body_anchor", anchor)
-	shader.set_shader_parameter("eye_region", Vector4(float(eye[0]), float(eye[1]), float(eye[2]), float(eye[3])))
-	var lid_color := _c("deep").lerp(_c("skin"), 0.40)
-	if skin_id == "standard_green":
-		lid_color = Color("93c92d")
-	shader.set_shader_parameter("eyelid_color", lid_color)
-	shader.set_shader_parameter("second_eye_region", Vector4(0.935, 0.145, 0.054, 0.086) if skin_id == "standard_green" and not asleep else Vector4.ZERO)
-	shader.set_shader_parameter("sleeping", 1.0 if asleep else 0.0)
-	if not asleep:
-		var mouth := _vector_from_data(data.get("mouth"), Vector2(0.35, 0.29))
-		_detailed_mouth = (mouth - anchor) * size + node.position
-	return true
-
-func _sync_detailed_visual() -> bool:
-	_ensure_detailed_nodes()
-	if mode == "electrocuted":
-		_detailed_root.hide()
-		_detailed_active = false
-		return false
-	var entry := _detailed_entry()
-	if not entry.get("run", {}) is Dictionary or (entry.get("run", {}) as Dictionary).is_empty():
-		_detailed_root.hide()
-		_detailed_active = false
-		return false
-	if _detailed_run_key != skin_id:
-		if not _configure_detailed_mesh(_detailed_run, entry["run"], false):
-			_detailed_root.hide()
-			return false
-		_detailed_run_key = skin_id
-	var waking: bool = mode in ["wake_climb", "climb_launch"]
-	var asleep: bool = mode in ["sleep", "ground_idle"]
-	var sleep_alpha := 1.0 if asleep else (1.0 - smoothstep(0.21, 0.36, launch_progress) if waking else 0.0)
-	if sleep_alpha > 0.0 and _detailed_sleep_key != skin_id:
-		if _configure_detailed_mesh(_detailed_sleep, entry.get("sleep", {}), true):
-			_detailed_sleep_key = skin_id
-		else:
-			sleep_alpha = 0.0
-	var direction := float(-side)
-	var angle := 0.0
-	if mode == "jump":
-		angle = -float(side) * sin(jump_progress * PI) * 1.08
-		if jump_progress > 0.72:
-			direction = float(side)
-	var tint := Color.WHITE.lerp(Color("d0ecff"), night_amount * 0.10)
-	if mode == "hit":
-		tint = tint.lerp(Color("ff998e"), _hurt)
-	_detailed_root.show()
-	_detailed_root.rotation = angle
-	_detailed_root.scale = Vector2(direction * (1.0 + _landing * 0.045 - _launch * 0.035), stretch * (1.0 - _landing * 0.07 + _launch * 0.045))
-	_detailed_run.visible = sleep_alpha < 1.0
-	_detailed_sleep.visible = sleep_alpha > 0.0 and _detailed_sleep_key == skin_id
-	_detailed_run.modulate = Color(tint.r, tint.g, tint.b, 1.0 - sleep_alpha)
-	_detailed_sleep.modulate = Color(tint.r, tint.g, tint.b, sleep_alpha)
-	var shader := _detailed_run.material as ShaderMaterial
-	var blink_time := fposmod(_clock, 4.1)
-	var closed := smoothstep(3.94, 3.99, blink_time) * (1.0 - smoothstep(4.035, 4.095, blink_time))
-	if waking:
-		closed = maxf(closed, 1.0 - smoothstep(0.22, 0.33, launch_progress))
-	shader.set_shader_parameter("closed_eye", closed)
-	shader.set_shader_parameter("stride_phase", _stride_phase)
-	shader.set_shader_parameter("tail_phase", _tail_phase)
-	shader.set_shader_parameter("crawl_amount", 1.0 if mode == "run" else (smoothstep(0.58, 0.76, launch_progress) if waking else 0.0))
-	shader.set_shader_parameter("breathing", sin(_clock * TAU / 5.4) * 0.60)
-	shader.set_shader_parameter("unfold", 1.0 if waking else 0.0)
-	shader.set_shader_parameter("wake_curl", 1.0 - smoothstep(0.42, 0.70, launch_progress) if waking else 0.0)
-	if waking:
-		var pose := _wake_pose()
-		var rest := _profile_pose()
-		for key: String in ["hip", "control", "control2", "chest"]:
-			shader.set_shader_parameter("pose_" + key, (pose[key] - ORIGIN) * PIXEL_SCALE)
-		shader.set_shader_parameter("head_shift", (pose["head"] - rest["head"]) * PIXEL_SCALE)
-		# A small chin lift preserves the painted face instead of rotating its
-		# large illustrated eye through the neck while the torso uncurls.
-		shader.set_shader_parameter("head_turn", float(pose["head_angle"]) * 0.15)
-	if _detailed_sleep.visible:
-		var rest_shader := _detailed_sleep.material as ShaderMaterial
-		rest_shader.set_shader_parameter("breathing", sin(_clock * TAU / 5.4) * 1.4)
-		# The same curled body stirs and lifts before the spine unfolds.
-		_detailed_sleep.rotation = -0.035 * smoothstep(0.20, 0.35, launch_progress) if waking else 0.0
-	_detailed_active = true
-	return true
-
-func _draw_detailed_tongue() -> void:
-	if _eat_clock < 0.0:
-		return
-	var mouth := _detailed_root.transform * _detailed_mouth
-	var target := _eat_world - position
-	var reach := smoothstep(0.0, 0.075, _eat_clock) if _eat_clock < 0.075 else 1.0 - smoothstep(0.075, 0.18, _eat_clock)
-	var tip := mouth.lerp(target, reach)
-	if _eat_clock < 0.18:
-		draw_line(mouth, tip, Color("713a63"), 4.0, true)
-		draw_line(mouth + Vector2(0.5, -0.7), tip, Color("ef8e9d"), 1.8, true)
-		var fly := target if _eat_clock < 0.075 else tip
-		draw_circle(fly, 3.0, Color("172b3a"), true, -1.0, true)
-		draw_ellipse(fly + Vector2(-3, -3), 3.7, 1.9, Color("c4e5df"))
-		draw_ellipse(fly + Vector2(3, -3), 3.7, 1.9, Color("c4e5df"))

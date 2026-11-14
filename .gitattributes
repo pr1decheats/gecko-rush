@@ -1,2 +1,5 @@
 # Keep frozen release binaries out of Godot staging and source archives.
 .github/release-assets/** export-ignore
+
+# Unused 2.6 atlas art remains in Git history/checkout, not in current archives.
+assets/characters/** export-ignore
