@@ -1,0 +1,35 @@
+{
+  "result": "PASS",
+  "reference": "assets/app-icon.png",
+  "icons": [
+    {
+      "path": "Payload/GeckoRush.app/AppIcon60x60@2x.png",
+      "size": [
+        120,
+        120
+      ],
+      "apple_cgbi": true,
+      "rgb_mean_absolute_differences": {
+        "nearest": 11.835578703703703,
+        "bilinear": 8.282986111111112,
+        "bicubic": 8.071550925925926,
+        "lanczos": 8.519351851851852
+      }
+    },
+    {
+      "path": "Payload/GeckoRush.app/AppIcon76x76@2x~ipad.png",
+      "size": [
+        152,
+        152
+      ],
+      "apple_cgbi": true,
+      "rgb_mean_absolute_differences": {
+        "nearest": 9.909048938134811,
+        "bilinear": 6.881867497691597,
+        "bicubic": 6.65027700831025,
+        "lanczos": 7.003837719298246
+      }
+    }
+  ],
+  "method": "Read-only CgBI decode; full-color icon compared against common resized reference kernels (RGB mean error below12/255); game assets untouched"
+}

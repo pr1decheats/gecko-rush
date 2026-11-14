@@ -1,3 +1,25 @@
+# Установочные файлы Gecko Rush 2.6
+
+Версия **2.6.0 (8)**, Godot **4.6.3 stable**. [Выпуск v2.6.0](https://github.com/pr1decheats/gecko-rush/releases/tag/v2.6.0), [страница скачивания](https://gecko-rush-godot-6e42.honedgrackle2.chatgpt.site).
+
+| Платформа | Файл | Размер, байт | SHA-256 |
+|---|---|---:|---|
+| Windows x64 | [GeckoRush-2.6-Windows.zip](https://github.com/pr1decheats/gecko-rush/releases/download/v2.6.0/GeckoRush-2.6-Windows.zip) | 50,671,515 | `449e0eaa286742f1f4ad8badab9cd3c7d1707877a78a383cbf4069d90779be34` |
+| Android ARM32/64 | [GeckoRush-2.6.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.6.0/GeckoRush-2.6.apk) | 67,172,761 | `6294e5f4a0c67f98f6f8a20fe8f942429f74e0115b8c56dc45cfb594d59178c5` |
+| iPhone arm64 | [GeckoRush-2.6-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.6.0/GeckoRush-2.6-unsigned.ipa) | 44,522,740 | `8869121feb3de6dbe36fc044e9d4e344708329d9b38891e7b3a49db578cb09c3` |
+
+Android независимо проверен по сертификату, v2/v3, API24/36, ARM32/64, ZIP/ELF 16 KB alignment, отсутствию разрешений и debuggable. IPA независимо скачана из Actions и проверена: unsigned native Mach-O arm64, iOS14 / SDK18.5, 75 MD5 PCK, лицензии и версии. Все **13 compiled scripts и 25 ресурсов иллюстраций** побайтно совпадают между Windows/Android/iPhone. Новая иконка проверена в Android launcher, Windows PE и полноцветных AppIcon PNG внутри IPA.
+
+[iOS CI43595434739](https://github.com/pr1decheats/gecko-rush/actions/runs/43595434739), source `7b3b36ebaf3fe5cd9701a03c092be91a9ef572a7`. [Windows CI43596560822](https://github.com/pr1decheats/gecko-rush/actions/runs/43596560822), source `bd05095f86fe9ad7e3cbde7216ab3cf85cc0e4a3`: точный EXE выполнен на Microsoft Windows NT10.0.26100.0, 360 headless-кадров / 6 секунд симуляции, exit0, без ошибок движка/скриптов. GPU и реальные FPS не измерялись.
+
+Релизные Android/Windows-файлы заморожены манифестами и частями с SHA-256. Нативные CI повторно собирают из частей те же пакеты, без повторной подписи APK. После проверки черновика все три файла также проверяются по постоянным публичным адресам. Отчёты: [валидация](validation.md), [Android](android-build.md), [Windows](windows-build.md), [iPhone](ios-ci.md).
+
+Ставьте Android поверх прежней версии. Для iPhone используйте прежний Apple ID и автоматический Bundle ID в Sideloadly; игру перед повторной подписью не удаляйте. Физические Android/iPhone этого выпуска не проверены.
+
+---
+
+## Архив: файлы 2.5 и более ранних выпусков
+
 # Установочные файлы Gecko Rush 2.5
 
 Версия **2.5.0 (7)**: APK/IPA независимо скачаны и проверены. Выпуск [v2.5.0](https://github.com/pr1decheats/gecko-rush/releases/tag/v2.5.0) опубликован **13 ноября 2026 года в 19:52:27 UTC** после независимой сверки файлов черновика; постоянные адреса подтверждены через GitHub API. После публикации оба файла повторно скачаны по постоянным адресам; размеры и SHA-256 точно совпали с независимо проверенными пакетами. [Страница скачивания](https://gecko-rush-godot-6e42.honedgrackle2.chatgpt.site): ПК — Windows 2.5, Android — 2.5, iPhone — 2.5.

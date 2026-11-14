@@ -1,0 +1,191 @@
+{
+  "version": "2.6.0",
+  "date_utc": "2026-11-14",
+  "result": "PASS",
+  "progress_checks": 446,
+  "course_suites": [
+    {
+      "suite": "test_course",
+      "exit_code": 0,
+      "elapsed_seconds": 12.47,
+      "summary": [
+        "COURSE TESTS: 7455 checks, 0 failures, 17304 generated cells, 24 obstacle kinds"
+      ],
+      "engine_errors": false
+    },
+    {
+      "suite": "test_v23_course",
+      "exit_code": 0,
+      "elapsed_seconds": 28.373,
+      "summary": [
+        "V23 COURSE: 4848 checks, 0 failures, 7212 generated cells"
+      ],
+      "engine_errors": false
+    },
+    {
+      "suite": "test_v24_course",
+      "exit_code": 0,
+      "elapsed_seconds": 22.332,
+      "summary": [
+        "V24 COURSE: 2637 checks, 0 failures, 254 physically forced gates, 425 collision-driven bot jumps"
+      ],
+      "engine_errors": false
+    },
+    {
+      "suite": "test_v24_tuning",
+      "exit_code": 0,
+      "elapsed_seconds": 0.434,
+      "summary": [
+        "V24 TUNING: 5820 checks, 0 failures"
+      ],
+      "engine_errors": false
+    },
+    {
+      "suite": "test_v25_icicles",
+      "exit_code": 0,
+      "elapsed_seconds": 0.536,
+      "summary": [
+        "V25 ICICLES: 26 checks, 0 failures"
+      ],
+      "engine_errors": false
+    },
+    {
+      "suite": "test_v26_visibility",
+      "exit_code": 0,
+      "elapsed_seconds": 1.928,
+      "summary": [
+        "V26 VISIBILITY: 189 checks, 0 failures, 53 single-relay cells"
+      ],
+      "engine_errors": false
+    },
+    {
+      "suite": "test_v25_night_center",
+      "exit_code": 0,
+      "elapsed_seconds": 3.346,
+      "summary": [
+        "V25 NIGHT/CENTER: 581 checks, 0 failures"
+      ],
+      "engine_errors": false
+    }
+  ],
+  "ui": {
+    "shop_headless": 463,
+    "worlds_legacy_headless": 626,
+    "ui_legacy_headless": 2539,
+    "ukrainian_headless": 61517,
+    "shop_native": 525,
+    "native_screenshots": 16,
+    "full_flow_native_screenshots": 35
+  },
+  "character": {
+    "headless": 360,
+    "native": 361,
+    "illustrated_characters": 21,
+    "poses": 42,
+    "atlases": 11
+  },
+  "pause": {
+    "headless": 81,
+    "native": 84,
+    "native_digit_screenshots": 3
+  },
+  "main_suites": [
+    {
+      "suite": "test_game",
+      "exit_code": 0,
+      "seconds": 2.41,
+      "summaries": [
+        "GAME: 46 checks, 0 failures; certified 3000 m in 16329 simulation steps"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v2",
+      "exit_code": 0,
+      "seconds": 4.11,
+      "summaries": [
+        "V2: 313 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v21",
+      "exit_code": 0,
+      "seconds": 1.58,
+      "summaries": [
+        "V21: 66 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v22",
+      "exit_code": 0,
+      "seconds": 1.61,
+      "summaries": [
+        "V22: 28 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v23_main",
+      "exit_code": 0,
+      "seconds": 7.42,
+      "summaries": [
+        "V23 MAIN: 492 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v24_main",
+      "exit_code": 0,
+      "seconds": 4.48,
+      "summaries": [
+        "V24 MAIN: 697 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v25_night_center",
+      "exit_code": 0,
+      "seconds": 5.5,
+      "summaries": [
+        "V25 NIGHT/CENTER: 581 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v26_resume_countdown",
+      "exit_code": 0,
+      "seconds": 2.21,
+      "summaries": [
+        "V26 RESUME COUNTDOWN: 81 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v25_boot",
+      "exit_code": 0,
+      "seconds": 4.09,
+      "summaries": [
+        "V25 BOOT: 21 checks, 0 failures"
+      ],
+      "errors": []
+    },
+    {
+      "suite": "test_v24_branding",
+      "exit_code": 0,
+      "seconds": 1.39,
+      "summaries": [
+        "Branding regression: 26 checks, 0 failures"
+      ],
+      "errors": []
+    }
+  ],
+  "pack": {
+    "exported_linux_pack_checks": 67,
+    "compiled_scripts_identical_android_windows": 13,
+    "illustrated_resources_identical_android_windows": 25
+  },
+  "physical_android_iphone_testing": false,
+  "physical_display_fps_measured": false
+}

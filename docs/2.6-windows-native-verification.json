@@ -1,0 +1,53 @@
+{
+  "result": "PASS",
+  "run_id": "43596560822",
+  "package": {
+    "result": "PASS",
+    "exe": "D:\\a\\_temp\\gecko-windows-release\\app\\GeckoRush.exe",
+    "exe_size": 119376384,
+    "exe_sha256": "366a1e95060ed61cdc697b25551ddfee8022644b95cf857881d94f8a780644ed",
+    "project_version": "2.6.0",
+    "pe": {
+      "machine": "AMD64",
+      "optional_header": "PE32+",
+      "subsystem": "Windows GUI",
+      "icon_group_present": true,
+      "signed": false,
+      "metadata": {
+        "file_version": "2.6.0.8",
+        "product_version": "2.6.0.0",
+        "strings": {
+          "FileVersion": "2.6.0.8",
+          "ProductVersion": "2.6.0.0",
+          "ProductName": "Gecko Rush",
+          "FileDescription": "Gecko Rush",
+          "LegalCopyright": "Triada Games"
+        }
+      }
+    },
+    "pck": {
+      "godot": "4.6.3",
+      "format": 3,
+      "entries_md5_verified": 75,
+      "sha256": "b1eef7927ee64daf8f2093aa00ffedd307d87ff8f3e1037d14f2b87b215a80ce",
+      "embedded_offset": 104700416,
+      "embedded_size": 14675956
+    },
+    "android": {
+      "apk": "D:\\a\\_temp\\gecko-windows-release\\GeckoRush-2.6.apk",
+      "apk_sha256": "6294e5f4a0c67f98f6f8a20fe8f942429f74e0115b8c56dc45cfb594d59178c5",
+      "compiled_scripts_identical": 13,
+      "illustrated_resources_identical": 25
+    },
+    "runtime_limit": "Static package check; execute this exact EXE on Windows for launch validation."
+  },
+  "native_windows": {
+    "frames": 360,
+    "platform": "Microsoft Windows NT 10.0.26100.0",
+    "mode": "headless",
+    "limit": "Native Windows startup/menu logic checked; GPU rendering and actual display FPS were not measured.",
+    "simulation_seconds": 6,
+    "exit_code": 0
+  },
+  "source_commit": "bd05095f86fe9ad7e3cbde7216ab3cf85cc0e4a3"
+}

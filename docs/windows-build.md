@@ -1,3 +1,19 @@
+# Windows 2.6 — готовая сборка x64
+
+`GeckoRush-2.6-Windows.zip`: **50,671,515 байт**, SHA-256 `449e0eaa286742f1f4ad8badab9cd3c7d1707877a78a383cbf4069d90779be34`. EXE **119,376,384 байт**, SHA-256 `366a1e95060ed61cdc697b25551ddfee8022644b95cf857881d94f8a780644ed`. [Загрузить ZIP](https://github.com/pr1decheats/gecko-rush/releases/download/v2.6.0/GeckoRush-2.6-Windows.zip).
+
+PE64 AMD64 / Windows GUI. FileVersion **2.6.0.8**, ProductVersion **2.6.0.0**, ProductName/FileDescription **Gecko Rush**, встроенная новая полноцветная иконка. PCK: **75 корректных MD5**, все **13 compiled scripts и 25 ресурсов подробных гекконов совпали с Android**. Пакетный verifier прошёл **17 положительных и отрицательных проб**, включая отсутствие каталога, шейдера, настоящего imported atlas и устаревшую иконку.
+
+[Нативный CI43596560822](https://github.com/pr1decheats/gecko-rush/actions/runs/43596560822), source `bd05095f86fe9ad7e3cbde7216ab3cf85cc0e4a3`, результат **PASS**. Точный замороженный EXE запущен на **Microsoft Windows NT 10.0.26100.0**: **360 headless-кадров / 6 секунд симуляции**, exit0, без ERROR/SCRIPT ERROR. Отдельные **67 проверок** 21 образа / 42 поз и лимита240FPS выполнены редакторным Godot на Linux против PCK именно этого EXE; это не нативный Windows GPU-тест.
+
+Официальные release templates Godot4.6.3 собраны без path overrides: внешний `--script` игнорируется, `--main-pack` отклоняется. Поэтому CI запускает штатную игру, а внешний диагностический скрипт выполняется отдельно редактором. Первоначальная расширенная CLI-проверка была исправлена с учётом этого ограничения; игровые файлы остались теми же.
+
+Для игры распакуйте ZIP и запустите `GeckoRush.exe`. Обновление не требует удаления `%APPDATA%\Godot\app_userdata\Gecko Rush`. Настройки графики предлагают60/120/240FPS, физика120Гц. Реальная частота зависит от монитора и ПК. Windows GPU и фактические240FPS не измерялись. Цифровой подписи издателя у EXE нет.
+
+---
+
+## Архив: предыдущие Windows-сборки
+
 # Windows Gecko Rush 2.5 — опубликован и проверен
 
 **GeckoRush-2.5-Windows.zip** опубликован, статически проверен, нативно запущен в Windows CI и независимо скачан по публичному адресу. Игровые код/ресурсы — **2.5.0 (7)**; все 25 замороженных runtime/config/asset-файлов и опубликованные APK/IPA не изменялись.

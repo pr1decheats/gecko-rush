@@ -77,10 +77,12 @@ func _capture() -> void:
 		card.size = Vector2(304, 284)
 		viewport.add_child(card)
 		var label := Label.new()
-		label.text = "%02d  %s" % [index + 1, IDS[index]]
+		label.text = str(root.get_node("Progress").get_skin(IDS[index])["name"])
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.add_theme_font_size_override("font_size", 17)
-		label.position = Vector2(column * 320 + 20, row * 300 + 262)
-		label.size = Vector2(288, 24)
+		label.position = Vector2(column * 320 + 20, row * 300 + 252)
+		label.size = Vector2(280, 40)
 		viewport.add_child(label)
 		var gecko := GECKO.new()
 		gecko.set_skin(IDS[index])

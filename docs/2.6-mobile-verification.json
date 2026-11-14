@@ -1,0 +1,40 @@
+{
+  "result": "PASS",
+  "ipa": "/workspace/work/v26-release/GeckoRush-2.6-unsigned.ipa",
+  "ipa_size": 44522740,
+  "ipa_sha256": "8869121feb3de6dbe36fc044e9d4e344708329d9b38891e7b3a49db578cb09c3",
+  "zip_crc": "PASS",
+  "app": "Payload/GeckoRush.app",
+  "bundle_identifier": "org.geckorush.game",
+  "version": "2.6.0",
+  "build": "8",
+  "supported_platforms": [
+    "iPhoneOS"
+  ],
+  "executable": "Payload/GeckoRush.app/GeckoRush",
+  "macho_slices": [
+    {
+      "architecture": "arm64",
+      "cpu_subtype": 0,
+      "filetype": "MH_EXECUTE",
+      "platform": "iOS device (2)",
+      "minimum_os": "14.0.0",
+      "sdk": "18.5.0"
+    }
+  ],
+  "apple_code_signature": "absent",
+  "pck": {
+    "path": "Payload/GeckoRush.app/GeckoRush.pck",
+    "godot": "4.6.3",
+    "format": 3,
+    "entries_md5_verified": 75,
+    "sha256": "80f41543bae44b859189ee21ead1715615648b35ce7d5c20df5447b7db189e2f"
+  },
+  "android_comparison": {
+    "apk": "/workspace/work/mobile-builds/GeckoRush-2.6.apk",
+    "apk_sha256": "6294e5f4a0c67f98f6f8a20fe8f942429f74e0115b8c56dc45cfb594d59178c5",
+    "compiled_scripts_identical": 13,
+    "illustrated_resources_identical": 25
+  },
+  "runtime_limit": "Static validation only; app was not run or signed"
+}
