@@ -62,9 +62,15 @@ jobs:
             throw 'Native startup log is missing or contains an engine/script error'
           }
           $runtimeLog = Join-Path $env:WINDOWS_OUTPUT 'exported-runtime.log'
-          $runtimeScript = Join-Path $env:GITHUB_WORKSPACE '.github/check_release_runtime.gd'
-          $runtime = Start-Process -FilePath $exe -ArgumentList @('--headless', '--audio-driver', 'Dummy', '--script', $runtimeScript, '--log-file', $runtimeLog) -PassThru
-          if (-not $runtime.WaitForExit(60000)) { $runtime.Kill(); throw 'Exported character runtime check timed out' }
+          $runtimeScript = (Join-Path $env:GITHUB_WORKSPACE '.github/check_release_runtime.gd').Replace('\', '/')
+          $appRoot = (Join-Path $env:WINDOWS_OUTPUT 'app').Replace('\', '/')
+          $packPath = $exe.Replace('\', '/')
+          $runtime = Start-Process -FilePath $exe -ArgumentList @('--headless', '--audio-driver', 'Dummy', '--main-pack', $packPath, '--path', $appRoot, '--fixed-fps', '60', '--quit-after', '600', '--script', $runtimeScript, '--log-file', $runtimeLog) -PassThru
+          if (-not $runtime.WaitForExit(60000)) {
+            $runtime.Kill()
+            if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Raw | Write-Output }
+            throw 'Exported character runtime check timed out'
+          }
           $runtime.Refresh()
           $runtimeText = Get-Content -LiteralPath $runtimeLog -Raw
           $runtimeText | Write-Output
@@ -86,6 +92,7 @@ jobs:
           "$zipHash  GeckoRush-2.6-Windows.zip" | Set-Content -Encoding utf8 "$env:WINDOWS_OUTPUT/Windows-SHA256SUMS.txt"
 
       - name: Keep verified Windows release and evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: GeckoRush-Windows-verified
