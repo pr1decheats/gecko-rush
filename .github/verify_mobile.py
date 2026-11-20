@@ -5,8 +5,8 @@ Python standard library only; runs on Linux and macOS without Apple tools.
 Checks the actual ZIP, device executable, metadata, PCK checksums and all compiled
 scripts. Does not run, sign, build or publish either application.
 
-    python3 .github/verify_mobile.py --ipa GeckoRush-2.7-unsigned.ipa \
-        --apk GeckoRush-2.7.apk --apk-sha256 <frozen SHA-256>
+    python3 .github/verify_mobile.py --ipa GeckoRush-2.8-unsigned.ipa \
+        --apk GeckoRush-2.8.apk --apk-sha256 <frozen SHA-256>
 """
 
 import argparse
@@ -407,7 +407,7 @@ def compare_android(entries, apk_path, expected_sha256, version):
             "unused_character_atlases_absent": articulated}
 
 
-def verify(ipa_path, apk_path, apk_sha256, version="2.7.0", build="9"):
+def verify(ipa_path, apk_path, apk_sha256, version="2.8.0", build="10"):
     require(ipa_path.is_file(), f"Actual IPA not found: {ipa_path}")
     with zipfile.ZipFile(ipa_path) as archive:
         members, root = inspect_archive(archive)
@@ -456,8 +456,8 @@ def main():
     parser.add_argument("--ipa", type=Path, required=True)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--apk-sha256", required=True, help="SHA-256 of the frozen signed APK")
-    parser.add_argument("--version", default="2.7.0")
-    parser.add_argument("--build", default="9")
+    parser.add_argument("--version", default="2.8.0")
+    parser.add_argument("--build", default="10")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-fA-F]{64}", args.apk_sha256):
         parser.error("--apk-sha256 must contain exactly 64 hexadecimal characters")

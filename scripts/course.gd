@@ -61,6 +61,8 @@ var next_cell := FIRST_CELL
 var route_side := 0
 var generated_cells := 0
 var animation_time := 0.0
+# Presentation-only interpolation clock; snapshots and collision use animation_time.
+var render_time := -1.0
 var validated_cells := 0
 var rejected_candidates := 0
 var maintenance_runs := 0
@@ -109,6 +111,7 @@ func setup(value: int, selected_world: String = "jungle") -> void:
 	maintenance_runs = 0
 	_cleanup_at = 0.0
 	animation_time = 0.0
+	render_time = -1.0
 	_set_palette()
 	_ensure_art()
 	ensure_ahead(0.0, 0.0)
@@ -913,6 +916,7 @@ func snapshot() -> Dictionary:
 		"last_layout": _last_layout, "recent_types": _recent_types.duplicate(), "side_streak": _side_streak}
 
 func restore(data: Dictionary) -> void:
+	render_time = -1.0
 	seed_value = int(data.get("seed", "1"))
 	world_id = String(data.get("world", "jungle"))
 	if not WORLD_TYPES.has(world_id):
@@ -983,11 +987,12 @@ func _ensure_art() -> void:
 func _draw() -> void:
 	if _art.is_empty():
 		return
+	var draw_time := render_time if render_time >= 0.0 else animation_time
 	var tint := Color.WHITE.lerp(Color("b4ccff"), night_amount * 0.16)
 	for item: Dictionary in hazards:
 		var kind := String(item["kind"])
-		var center := _hazard_center(item, animation_time)
-		var active := _hazard_active(item, animation_time)
+		var center := _hazard_center(item, draw_time)
+		var active := _hazard_active(item, draw_time)
 		var color := tint
 		if not active:
 			color.a = 0.24
@@ -1001,12 +1006,14 @@ func _draw() -> void:
 				# One cached tooth per collision triangle; no stretched tooth count.
 				draw_texture_rect(_art["spikes"], Rect2(0.0, -half_height + float(index) * tooth_height + 1.0, SPIKE_REACH, tooth_height - 2.0), false, color)
 		else:
-			var angle := _hazard_rotation(item, animation_time)
+			var angle := _hazard_rotation(item, draw_time)
 			var radius := float(item["r"])
 			if bool(item.get("suspended", false)) and not bool(item.get("wall_attached", false)):
 				draw_set_transform(Vector2.ZERO)
 				var anchor := Vector2(float(item["x"]), -float(item["h"]) - 135.0)
-				draw_line(anchor, center, accent_color.darkened(0.6) if kind == "vine" else metal_color.darkened(0.45), 4.0)
+				var suspension := accent_color.darkened(0.60) if kind == "vine" else metal_color.darkened(0.58)
+				draw_line(anchor, center, suspension, 5.0, true)
+				draw_line(anchor + Vector2(-0.8, 0), center + Vector2(-0.8, 0), suspension.lightened(0.34), 1.5, true)
 			draw_set_transform(center, angle)
 			if String(item.get("shape", "circle")) == "capsule":
 				var half_length := float(item.get("half_length", 0.0))
@@ -1026,22 +1033,47 @@ func _draw() -> void:
 					draw_texture_rect(_art[kind], Rect2(-extent, extent * 2.0), false, color)
 				if kind == "beetle" or kind == "insect":
 					# Wings stay within the same lethal body radius.
-					var flutter := sin(animation_time * 24.0) * 3.0
+					var flutter := sin(draw_time * 24.0) * 3.0
 					draw_line(Vector2(-radius * 0.7, -5), Vector2(-radius * 0.2, flutter), accent_color.lightened(0.3), 3.0)
 					draw_line(Vector2(radius * 0.7, -5), Vector2(radius * 0.2, -flutter), accent_color.lightened(0.3), 3.0)
+			_draw_hazard_energy(kind, radius, float(item.get("half_length", 0.0)), draw_time + float(item.get("phase", 0.0)), color.a)
 	for coin: Dictionary in coins:
 		if not bool(coin.get("collected", false)):
 			var center := Vector2(float(coin["x"]), -float(coin["h"]))
-			var width := 0.24 + absf(cos(animation_time * 3.4 + float(coin["phase"]))) * 0.76
+			var width := 0.24 + absf(cos(draw_time * 3.4 + float(coin["phase"]))) * 0.76
 			draw_set_transform(center, 0.0, Vector2(width, 1.0))
 			draw_texture_rect(_art["coin"], Rect2(-28, -28, 56, 56), false, Color.WHITE)
 	for fly: Dictionary in flies:
 		if not bool(fly.get("eaten", false)):
-			var center := Vector2(float(fly["x"]) + sin(animation_time * 7.0 + float(fly["phase"])) * 2.0, -float(fly["h"]))
+			var center := Vector2(float(fly["x"]) + sin(draw_time * 7.0 + float(fly["phase"])) * 2.0, -float(fly["h"]))
 			draw_set_transform(center)
-			var frame := int(animation_time * 30.0) % 2
+			var frame := int(draw_time * 30.0) % 2
 			draw_texture_rect(_art["fly%d" % frame], Rect2(-16, -16, 32, 32), false, tint)
 	draw_set_transform(Vector2.ZERO)
+
+# A few inset highlights convey electricity/heat without changing a silhouette.
+# Every point stays inside the existing body; no image is allocated during play.
+func _draw_hazard_energy(kind: String, radius: float, half_length: float, time: float, opacity: float) -> void:
+	var pulse := 0.5 + sin(time * 3.0) * 0.5
+	if kind in ["electric", "lightning"]:
+		var previous := Vector2(-half_length * 0.64, 0)
+		for index in range(1, 9):
+			var point := Vector2(lerpf(-half_length * 0.64, half_length * 0.64, float(index) / 8.0), sin(time * 10.0 + float(index) * 1.9) * radius * 0.48)
+			draw_line(previous, point, Color(0.23, 0.76, 1.0, opacity * 0.85), 3.5, true)
+			draw_line(previous, point, Color(0.87, 1.0, 1.0, opacity), 1.1, true)
+			previous = point
+		for direction: float in [-1.0, 1.0]:
+			draw_circle(Vector2(direction * half_length * 0.89, 0), radius * 0.35, Color(0.67, 0.94, 1.0, opacity * (0.45 + pulse * 0.35)), true, -1.0, true)
+	elif kind == "storm_orb":
+		draw_arc(Vector2.ZERO, radius * 0.72, -1.6 + time * 0.7, 0.45 + time * 0.7, 12, Color(0.65, 0.93, 1.0, opacity * (0.4 + pulse * 0.25)), 1.4, true)
+	elif kind == "lava_orb":
+		draw_arc(Vector2(-radius * 0.06, 0), radius * 0.43, -2.6, -0.6, 10, Color(1.0, 0.83, 0.43, opacity * (0.1 + pulse * 0.35)), 1.8, true)
+	elif kind == "fire_jet":
+		draw_line(Vector2(-half_length * 0.62, 0), Vector2(half_length * 0.68, 0), Color(1.0, 0.98, 0.78, opacity * (0.2 + pulse * 0.3)), radius * 0.20, true)
+	elif kind in ["frost", "crystal_beam"]:
+		var shine := Color("e4ffff") if kind == "frost" else Color("fff0ff")
+		shine.a = opacity * (0.08 + pulse * 0.20)
+		draw_line(Vector2(-half_length * 0.72, 0), Vector2(half_length * 0.72, 0), shine, maxf(1.0, radius * 0.07), true)
 
 func _capsule_color(kind: String) -> Color:
 	match kind:
@@ -1094,8 +1126,20 @@ static func _silhouette_points(kind: String, radius: float, half_length: float =
 		points.append(Vector2.from_angle(angle) * radius * factor)
 	return points
 
+# The art cache stores two pixels per former source texel. Material coordinates
+# stay in the original local units, so changing art resolution cannot widen a hit.
+func _edge_distance(point: Vector2, polygon: PackedVector2Array) -> float:
+	var distance_squared := INF
+	for index in polygon.size():
+		var nearest := Geometry2D.get_closest_point_to_segment(point, polygon[index], polygon[(index + 1) % polygon.size()])
+		distance_squared = minf(distance_squared, nearest.distance_squared_to(point))
+	return sqrt(distance_squared)
+
+func _segment_art_distance(point: Vector2, start: Vector2, finish: Vector2) -> float:
+	return point.distance_to(Geometry2D.get_closest_point_to_segment(point, start, finish))
+
 func _long_polygon_texture(kind: String) -> Texture2D:
-	var image := _new_image(128, 32)
+	var image := _new_image(256, 64)
 	var ratio := 3.0
 	match kind:
 		"icicle": ratio = ICICLE_HALF_LENGTH / ICICLE_RADIUS
@@ -1106,106 +1150,177 @@ func _long_polygon_texture(kind: String) -> Texture2D:
 		"crystal_beam": ratio = 62.0 / 10.0
 	var points := _silhouette_points(kind, 1.0, ratio)
 	var base := _capsule_color(kind)
-	for y in range(32):
-		for x in range(128):
-			var point := Vector2((float(x) / 127.0 * 2.0 - 1.0) * (ratio + 1.0), float(y) / 31.0 * 2.0 - 1.0)
+	for y in image.get_height():
+		for x in image.get_width():
+			var point := Vector2((float(x) / 255.0 * 2.0 - 1.0) * (ratio + 1.0), float(y) / 63.0 * 2.0 - 1.0)
 			if not Geometry2D.is_point_in_polygon(point, points): continue
-			var color := base.lightened(0.2) if y < 15 else base.darkened(0.18)
-			var edge := false
-			for index in range(points.size()):
-				if Geometry2D.get_closest_point_to_segment(point, points[index], points[(index + 1) % points.size()]).distance_squared_to(point) < 0.012:
-					edge = true
-					break
-			if edge: color = Color("173f5b") if kind == "frost" else (Color("24546e") if kind == "icicle" else base.darkened(0.6))
-			elif kind == "icicle":
-				# A bright inner face and a dark contour stay inside the same
-				# lethal silhouette; no glow makes empty space look dangerous.
-				if point.y < -0.30: color = Color("f1ffff")
-				elif absf(point.y - 0.05) < 0.16: color = Color("d9fbff")
-				else: color = Color("80cce7")
-			elif kind == "vine":
-				if absf(point.y) < 0.2: color = Color("517536")
-				elif absf(point.y) > 0.5: color = Color("b6aa67")
-			elif kind == "fire_jet":
-				if absf(point.y) < 0.34 + sin(point.x * 3.0) * 0.12: color = Color("fff2a2")
-				elif absf(point.y) > 0.65: color = Color("e45228")
-			elif kind == "wind_blade":
-				if absf(point.y + 0.4) < 0.15: color = Color("f2fff9")
-				else: color.a = 0.85
-			elif kind == "frost":
-				# Bright face/dark outline stay inside the exact lethal polygon.
-				color = Color("b8eafa") if point.y > 0.0 else Color("dffaff")
-				if absf(point.y) < 0.18 or x % 19 < 3: color = Color("f7ffff")
-			elif kind == "crystal_beam":
-				if absf(point.y) < 0.16: color = Color("fff4ff")
-				elif (x / 16) % 2 == 0: color = base.lightened(0.3)
+			var edge := _edge_distance(point, points)
+			var longitudinal := point.x / (ratio + 1.0)
+			var color := base.lightened(0.18 - point.y * 0.15)
+			match kind:
+				"icicle":
+					# Three broad refractive planes, with a clear white cutting edge.
+					color = Color("9bd9ee") if point.y > 0.04 else Color("d4f5ff")
+					if point.y < -0.28 + longitudinal * 0.12: color = Color("efffff")
+					if point.y > 0.30 + longitudinal * 0.10: color = Color("55a8d3")
+					if absf(point.y + 0.09 - longitudinal * 0.09) < 0.045: color = Color("ffffff")
+					if absf(point.x + point.y * 0.52 + 0.65) < 0.035 and point.y > -0.45: color = Color("66aecb")
+				"vine":
+					color = Color("758f3f").lightened(maxf(0.0, -point.y) * 0.30)
+					if absf(point.y - sin(point.x * 2.8) * 0.13) < 0.12: color = Color("304b30")
+					elif absf(point.y - 0.28 - sin(point.x * 2.8) * 0.13) < 0.07: color = Color("b1bb64")
+					if absf(point.y) > 0.50: color = Color("d0c482") if point.y < 0.0 else Color("9c8356")
+					if fposmod(point.x + point.y * 0.6, 0.92) < 0.11 and absf(point.y) < 0.45: color = Color("52682d")
+				"fire_jet":
+					color = Color("e85c28")
+					if absf(point.y - sin(point.x * 2.1) * 0.12) < 0.62: color = Color("ff9d35")
+					if absf(point.y - sin(point.x * 3.2) * 0.10) < 0.30: color = Color("ffe17a")
+					if absf(point.y + sin(point.x * 2.0) * 0.05) < 0.11: color = Color("fff8ce")
+				"wind_blade":
+					color = Color("84c6c8") if point.y > -0.14 else Color("d7fff0")
+					if absf(point.y + 0.43 + longitudinal * 0.10) < 0.10: color = Color("f8fffa")
+					if point.y > 0.10: color = Color("548eac")
+					if absf(point.y + 0.19 + sin(point.x * 1.7) * 0.09) < 0.045: color = Color("f4fffc")
+				"frost":
+					color = Color("a8d9f2") if point.y > 0.0 else Color("d6f7ff")
+					if point.y > 0.19: color = Color("68b2dc")
+					if absf(point.y + 0.09) < 0.08: color = Color("ffffff")
+					if absf(longitudinal) < 0.13:
+						color = Color("b8eaff") if point.x > 0.0 else Color("eaffff")
+						if absf(point.y + point.x * 2.4) < 0.06: color = Color("ffffff")
+					if absf(point.x + point.y * 0.8 - 0.82) < 0.035: color = Color("4694ba")
+				"crystal_beam":
+					color = Color("a451c1") if point.y > 0.08 else Color("eda8ff")
+					if point.y < -0.48: color = Color("c7f0ff")
+					if absf(point.y + 0.08) < 0.10: color = Color("fff4ff")
+					if fposmod(point.x * 0.6 + point.y * 0.55, 1.6) < 0.065: color = Color("733e9f")
+			# Outline and inset bevel remain entirely inside the exact hit polygon.
+			if edge < 0.055:
+				color = Color("173f5b") if kind in ["frost", "icicle"] else base.darkened(0.67)
+			elif edge < 0.105 and kind != "fire_jet":
+				color = color.lightened(0.38) if point.y < 0.0 else color.darkened(0.28)
+			image.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(image)
+
+func _electric_rod_texture() -> Texture2D:
+	var image := _new_image(256, 48)
+	for y in image.get_height():
+		for x in image.get_width():
+			var point := Vector2(float(x) / 255.0 * 2.0 - 1.0, float(y) / 47.0 * 2.0 - 1.0)
+			var color := Color("28445c")
+			if absf(point.y) < 0.74: color = Color("397c96")
+			if point.y < -0.30 and point.y > -0.67: color = Color("8ec9d6")
+			if absf(point.x) > 0.66:
+				# Ceramic insulators and broad retaining bands read at full speed.
+				color = Color("7da7ba") if point.y < 0.0 else Color("47758f")
+				if fposmod(absf(point.x) - 0.66, 0.105) < 0.032: color = Color("20394e")
+			elif absf(point.y) < 0.28:
+				color = Color("55c9eb")
+				if absf(point.y - sin(point.x * 16.0) * 0.12) < 0.09: color = Color("e4ffff")
+			if absf(point.y) > 0.91: color = Color("1b344b")
 			image.set_pixel(x, y, color)
 	return ImageTexture.create_from_image(image)
 
 func _themed_texture(kind: String) -> Texture2D:
 	if kind in ["icicle", "vine", "frost", "fire_jet", "wind_blade", "crystal_beam"]:
 		return _long_polygon_texture(kind)
-	# Small cached pixel silhouettes carry biome-specific materials and cues.
-	# The same local polygon is used for collision, including rotating shards.
-	var image := _new_image(64, 64)
+	if kind in ["electric", "lightning"]:
+		return _electric_rod_texture()
+	var image := _new_image(128, 128)
 	var polygonal := kind in ["root", "boulder", "rockfall", "canyon_weight", "ice_chunk", "prism", "shard", "obsidian", "crystal"]
 	var points := _silhouette_points(kind, 31.5)
 	var base := danger_color
 	match kind:
-		"root": base = Color("80543b")
-		"beetle", "insect": base = Color("c27c3b")
-		"boulder", "rockfall", "stone", "falling": base = Color("ad7752")
-		"canyon_weight", "pendulum": base = Color("80685d")
-		"ice_chunk": base = Color("8cd6f0")
-		"prism", "crystal": base = Color("b985ed")
-		"shard": base = Color("ef98dc")
-		"lava_orb": base = Color("f66b29")
-		"obsidian", "saw": base = Color("493b5d")
-		"storm_orb": base = Color("52647e")
-		_: base = _capsule_color(kind)
-	for y in range(64):
-		for x in range(64):
-			var point := Vector2(float(x) - 31.5, float(y) - 31.5)
-			var inside := Geometry2D.is_point_in_polygon(point, points) if polygonal else point.length_squared() <= 31.5 * 31.5
-			if not inside: continue
-			var light := clampf((-point.x - point.y) / 100.0, -0.25, 0.25)
+		"root": base = Color("9a7650")
+		"beetle", "insect": base = Color("b6833e")
+		"boulder", "stone": base = Color("c29870")
+		"rockfall", "falling": base = Color("aa7559")
+		"canyon_weight", "pendulum": base = Color("92785f")
+		"ice_chunk": base = Color("8ed9ef")
+		"prism", "crystal": base = Color("b18ce7")
+		"shard": base = Color("e48dce")
+		"lava_orb": base = Color("b54427")
+		"obsidian", "saw": base = Color("554765")
+		"storm_orb": base = Color("57738c")
+	for y in image.get_height():
+		for x in image.get_width():
+			var point := Vector2(float(x) / 127.0 * 63.0 - 31.5, float(y) / 127.0 * 63.0 - 31.5)
+			var distance := point.length()
+			if not (Geometry2D.is_point_in_polygon(point, points) if polygonal else distance <= 31.5): continue
+			var edge := _edge_distance(point, points) if polygonal else 31.5 - distance
+			var light := clampf((-point.x * 0.6 - point.y) / 90.0, -0.32, 0.36)
 			var color := base.lightened(light) if light >= 0.0 else base.darkened(-light)
-			var edge := point.length() > 28.5
-			if polygonal:
-				edge = false
-				for index in range(points.size()):
-					if Geometry2D.get_closest_point_to_segment(point, points[index], points[(index + 1) % points.size()]).distance_squared_to(point) < 3.0:
-						edge = true
-						break
-			if edge: color = base.darkened(0.6)
-			elif kind == "root":
-				if (x + int(sin(float(y) * 0.18) * 7.0)) % 13 < 3: color = Color("392e28")
-				if y < 18 and x % 9 < 5: color = Color("8ba747")
-			elif kind == "beetle" or kind == "insect":
-				if absf(point.x) < 2.5 or (x / 9 + y / 11) % 4 == 0: color = Color("3d3028")
-				if y < 19 and x > 19 and x < 45: color = Color("f8e4a2")
-			elif kind in ["boulder", "rockfall", "stone", "falling"]:
-				if (y + int(point.x * 0.24)) % 17 < 3: color = base.darkened(0.28)
-				if absf(point.x - sin(point.y * 0.1) * 8.0) < 1.5 and y > 27: color = Color("4a342c")
-			elif kind in ["canyon_weight", "pendulum"]:
-				if absf(point.x) < 3.0 or absf(point.y) < 3.0: color = Color("c3a076")
-				if point.length() < 7.0: color = Color("472d25")
-			elif kind in ["ice_chunk", "prism", "shard", "crystal"]:
-				if point.x < point.y * 0.35: color = base.lightened(0.2)
-				if absf(point.x - point.y * 0.35) < 1.5: color = Color("efffff")
-				if x % 21 == 4 and y % 19 < 6: color = Color("f8e5ff")
-			elif kind in ["lava_orb", "obsidian", "saw"]:
-				if absf(sin(point.x * 0.15 + sin(point.y * 0.12))) < 0.2 or absf(point.y + point.x * 0.45) < 2.0: color = Color("ffb642")
-				if kind == "lava_orb" and point.length() < 20.0: color = Color("ffd06a")
-			elif kind == "storm_orb":
-				if absf(point.x - sin(point.y * 0.34) * 10.0) < 2.5: color = Color("d9faff")
-				if point.y < -9.0 and x % 17 < 7: color = Color("8cb0c8")
-			elif kind == "vine":
-				if (x + y / 5) % 14 < 4: color = Color("30452a")
-			elif kind == "fire_jet":
-				if absf(point.y) < 10.0 + sin(point.x * 0.3) * 4.0: color = Color("fff3a3")
-			elif kind in ["lightning", "electric", "crystal_beam", "wind_blade", "frost", "icicle"]:
-				if absf(point.y - sin(point.x * 0.35) * 7.0) < 3.0: color = Color("efffff")
+			match kind:
+				"root":
+					var rings := Vector2((point.x + 4.0) * 0.8, point.y + 1.5).length()
+					if fposmod(rings + sin(point.angle() * 3.0), 6.7) < 1.1: color = color.darkened(0.32)
+					if _segment_art_distance(point, Vector2(-5, 2), Vector2(20, 25)) < 1.0: color = Color("493d2e")
+					if point.y < -16.0 + sin(point.x * 0.22) * 3.8: color = Color("6f8c40").lightened(maxf(0.0, -point.y - 20.0) * 0.017)
+					if Vector2((point.x + 4.0) * 0.8, point.y + 1.5).length() < 3.0: color = Color("5c412f")
+				"beetle", "insect":
+					color = Color("c38d44").lightened(maxf(0.0, -point.x - point.y) / 110.0)
+					if point.x > 1.2: color = Color("805d32").lightened(maxf(0.0, -point.y) / 110.0)
+					if absf(point.x) < 1.1 or point.y < -14.5: color = Color("324c37")
+					if absf(point.x) > 20.0 and absf(sin((point.y + 3.0) * 0.25)) < 0.24: color = Color("3d372c")
+					if point.y > -10.0 and absf(point.x) > 5.0 and absf(point.x) < 8.0: color = Color("efca76")
+					var eye := minf(point.distance_to(Vector2(-10, -22)), point.distance_to(Vector2(10, -22)))
+					if eye < 4.3: color = Color("e8c76d")
+					if eye < 2.3: color = Color("162d2c")
+					if point.distance_to(Vector2(-11, -23)) < 0.9 or point.distance_to(Vector2(9, -23)) < 0.9: color = Color("f0ffff")
+				"boulder", "stone", "rockfall", "falling":
+					if point.y < point.x * 0.43 - 7.0: color = color.lightened(0.13)
+					if point.x > 9.0 - point.y * 0.21: color = color.darkened(0.16)
+					var strata := point.y + point.x * (0.24 if kind in ["boulder", "stone"] else -0.39)
+					if fposmod(strata + sin(point.x * 0.10) * 1.5, 12.0) < 1.15: color = color.darkened(0.19)
+					var crack := minf(_segment_art_distance(point, Vector2(-6, -20), Vector2(1, 0)), _segment_art_distance(point, Vector2(1, 0), Vector2(-8, 17)))
+					if kind in ["rockfall", "falling"]: crack = minf(crack, _segment_art_distance(point, Vector2(1, 0), Vector2(22, 10)))
+					if crack < 0.8: color = Color("624936")
+					if point.distance_to(Vector2(-16, -11)) < 2.1: color = Color("d8b794")
+				"canyon_weight", "pendulum":
+					if distance > 23.0: color = Color("b08c5b").lightened(maxf(0.0, -point.y) / 100.0)
+					if distance > 20.0 and distance < 22.0: color = Color("4e4035")
+					if absf(point.x) < 3.2 or absf(point.y) < 3.2: color = Color("bfa174")
+					if distance < 9.0: color = Color("473d38")
+					if distance < 6.5: color = Color("76695c")
+					if point.distance_to(Vector2(-16, -16)) < 2.6 or point.distance_to(Vector2(16, -16)) < 2.6 or point.distance_to(Vector2(-16, 16)) < 2.6 or point.distance_to(Vector2(16, 16)) < 2.6: color = Color("ead3a0")
+				"ice_chunk", "prism", "shard", "crystal":
+					color = base.lightened(0.27) if point.x < point.y * 0.36 else base.darkened(0.13)
+					if point.y < -absf(point.x) * 0.43 - 7.0: color = base.lightened(0.48)
+					if point.y > absf(point.x) * 0.4 + 6.0: color = base.darkened(0.30)
+					if absf(point.x - point.y * 0.36) < 0.9: color = Color("efffff")
+					if absf(point.y + point.x * 0.42 + 5.0) < 0.6 and point.x < 12.0: color = base.lightened(0.54)
+					if kind == "ice_chunk":
+						if _segment_art_distance(point, Vector2(-17, -6), Vector2(-8, 5)) < 0.6 or _segment_art_distance(point, Vector2(-8, 5), Vector2(-13, 19)) < 0.6: color = Color("5aabc9")
+						if point.distance_to(Vector2(10, -14)) < 1.7 or point.distance_to(Vector2(15, -8)) < 0.9: color = Color("dfffff")
+					elif point.x < -5.0 and point.y < 0.0: color = color.lerp(Color("b6fbef"), 0.24)
+				"lava_orb":
+					color = Color("6c3530").lightened(maxf(0.0, -point.y) / 150.0)
+					var heat := absf(sin(point.x * 0.105 + sin(point.y * 0.12) * 0.9))
+					if heat < 0.52: color = Color("e86629")
+					if heat < 0.26: color = Color("ffb94b")
+					if heat < 0.10: color = Color("ffe69a")
+					if point.y > 18.0: color = color.darkened(0.15)
+				"obsidian", "saw":
+					if point.x < point.y * 0.43: color = Color("736283")
+					if point.y > absf(point.x) * 0.2: color = Color("3d354b")
+					if absf(point.x - point.y * 0.43) < 1.0: color = Color("b69cb8")
+					var fault := minf(_segment_art_distance(point, Vector2(-19, -3), Vector2(-4, 4)), _segment_art_distance(point, Vector2(-4, 4), Vector2(4, 21)))
+					if fault < 1.6: color = Color("be4c2e")
+					if fault < 0.65: color = Color("ffb052")
+				"storm_orb":
+					if distance > 22.0: color = Color("7898ad").lightened(maxf(0.0, -point.x - point.y) / 150.0)
+					if distance > 19.8 and distance < 22.5: color = Color("253d55")
+					if distance < 16.5: color = Color("1d485f")
+					if distance < 12.0: color = Color("379cb8")
+					var bolt := minf(_segment_art_distance(point, Vector2(4, -15), Vector2(-5, 0)), _segment_art_distance(point, Vector2(-5, 0), Vector2(5, 1)))
+					bolt = minf(bolt, _segment_art_distance(point, Vector2(5, 1), Vector2(-3, 14)))
+					if bolt < 2.5: color = Color("78dff5")
+					if bolt < 1.1: color = Color("efffff")
+					if absf(point.x) < 2.0 and absf(point.y) > 23.0: color = Color("304b62")
+			if edge < 0.95:
+				color = base.darkened(0.69)
+			elif edge < 2.15:
+				color = color.lightened(0.30) if point.y + point.x * 0.3 < 0.0 else color.darkened(0.25)
 			image.set_pixel(x, y, color)
 	return ImageTexture.create_from_image(image)
 
@@ -1218,23 +1333,52 @@ func _rect(image: Image, rect: Rect2i, color: Color) -> void:
 	image.fill_rect(rect.intersection(Rect2i(0, 0, image.get_width(), image.get_height())), color)
 
 func _spike_texture() -> Texture2D:
-	var image := _new_image(84, 32)
+	var image := _new_image(168, 64)
 	var base := danger_color
 	match world_id:
-		"jungle": base = Color("8c9148")
-		"canyon": base = Color("bd875b")
-		"ice": base = Color("b0e8f3")
-		"crystal": base = Color("c69bf4")
-		"volcano": base = Color("d57537")
-		"sky": base = Color("abcbe4")
-	for y in range(32):
-		var reach := (1.0 - absf((float(y) - 15.5) / 15.5)) * 83.0
-		for x in range(int(reach) + 1):
-			var color := base.lightened(0.22) if y < 15 else base.darkened(0.15)
-			if x < 2 or float(x) > reach - 2.0: color = base.darkened(0.55)
-			elif world_id == "jungle" and (x + y * 2) % 17 < 3: color = Color("483925")
-			elif world_id == "volcano" and (x + y * 3) % 23 < 3: color = Color("ffdc66")
-			elif world_id == "sky" and y > 12 and y < 17: color = Color("efffff")
+		"jungle": base = Color("a0a05e")
+		"canyon": base = Color("c69971")
+		"ice": base = Color("b4e9f5")
+		"crystal": base = Color("bc8fe4")
+		"volcano": base = Color("6d4c52")
+		"sky": base = Color("9fc7df")
+	for y in image.get_height():
+		var py := float(y) / 63.0 * 31.0
+		var reach := (1.0 - absf((py - 15.5) / 15.5)) * 83.0
+		for x in image.get_width():
+			var px := float(x) / 167.0 * 83.0
+			if px > reach: continue
+			var color := base.lightened(0.28) if py < 15.5 else base.darkened(0.23)
+			var ridge := 15.5 + px * 0.015
+			match world_id:
+				"jungle":
+					# Keratin thorn with a woody root and a single clean ridge.
+					if px < 12.0: color = Color("66683a") if py > 15.5 else Color("81914c")
+					if absf(py - ridge) < 0.85: color = Color("dfcf91")
+					if absf(py - (12.0 + px * 0.04)) < 0.45: color = color.darkened(0.28)
+				"canyon":
+					if absf(py - ridge) < 0.75: color = Color("eed1a0")
+					if fposmod(px + py * 3.4, 24.0) < 1.4: color = color.darkened(0.22)
+				"ice":
+					if absf(py - ridge) < 1.1: color = Color("f5ffff")
+					if py > 18.0: color = Color("6bb2d4")
+					if absf(py + px * 0.075 - 17.0) < 0.5: color = Color("d8f8ff")
+				"crystal":
+					if absf(py - ridge) < 0.8: color = Color("f4eaff")
+					if px < 17.0 and py < 15.5: color = Color("ade9ef")
+					if absf(py + px * 0.08 - 17.0) < 0.5: color = Color("875eb8")
+				"volcano":
+					if absf(py - ridge) < 0.7: color = Color("c5948c")
+					var fault := absf(py - 15.5 - sin(px * 0.18) * 2.0)
+					if fault < 1.5 and px < 54.0: color = Color("df7236")
+					if fault < 0.6 and px < 54.0: color = Color("ffcc64")
+				"sky":
+					if absf(py - ridge) < 1.0: color = Color("f0ffff")
+					if py > 18.0: color = Color("678da9")
+					if absf(py + px * 0.045 - 12.5) < 0.55: color = Color("c7edfa")
+			# Inside-only contour follows the collision triangle, never a halo.
+			if px < 1.0 or px > reach - 1.8: color = base.darkened(0.64)
+			elif px > reach - 3.5: color = color.lightened(0.24) if py < 15.5 else color.darkened(0.15)
 			image.set_pixel(x, y, color)
 	return ImageTexture.create_from_image(image)
 

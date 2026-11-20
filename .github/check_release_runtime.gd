@@ -30,7 +30,7 @@ func _run() -> void:
 	await process_frame
 	var progress: Node = root.get_node("Progress")
 	root.get_node("Audio").set_music_enabled(false)
-	check(str(ProjectSettings.get_setting("application/config/version")) == "2.7.0", "Exported project version")
+	check(str(ProjectSettings.get_setting("application/config/version")) == "2.8.0", "Exported project version")
 	check(progress.available_fps() == [60, 120, 240], "Desktop 240 FPS option survives export")
 	progress.data.settings["fps"] = 240
 	progress.settings_changed()

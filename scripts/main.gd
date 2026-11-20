@@ -65,6 +65,12 @@ var _resume_layer: CanvasLayer
 var _resume_backdrop: ColorRect
 var _resume_panel: Panel
 var _resume_label: Label
+# Rendering follows the last two completed simulation steps. Physics and saves
+# always read player_position(), never the interpolated Node2D transform.
+var _motion_previous: Dictionary = {}
+var _motion_current: Dictionary = {}
+var _motion_rendered: Dictionary = {}
+var _motion_waiting_resume := false
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
@@ -133,6 +139,68 @@ func player_position() -> Vector2:
 		x = lerpf(start, finish, eased)
 	return Vector2(x, -height_px)
 
+func _capture_motion() -> Dictionary:
+	return {"position": player_position(), "height": max_height_px,
+		"time": run_time, "speed": current_speed(), "mode": gecko.mode,
+		"side": gecko.side, "jump": gecko.jump_progress,
+		"bob": sin(clampf(jump_elapsed / JUMP_DURATION, 0.0, 1.0) * PI) * JUMP_ARC if jump_elapsed >= 0.0 else 0.0}
+
+func _reset_motion_interpolation() -> void:
+	_motion_current = _capture_motion()
+	_motion_previous = _motion_current.duplicate()
+	_motion_rendered = _motion_current.duplicate()
+	_motion_waiting_resume = false
+	gecko.clear_render_motion()
+
+func _begin_motion_step() -> void:
+	if _motion_current.is_empty():
+		_reset_motion_interpolation()
+	_motion_previous = _capture_motion()
+	if _motion_waiting_resume:
+		# Resume from exactly the image held throughout 3, 2, 1. The world
+		# simulation remains at its saved point; only this first visual span
+		# includes the fraction of a tick that was still pending on pause.
+		_motion_previous = _motion_rendered.duplicate()
+		_motion_previous["position"] = gecko.position
+		_motion_waiting_resume = false
+
+func _sample_motion(alpha: float) -> Dictionary:
+	var weight := clampf(alpha, 0.0, 1.0)
+	var a := _motion_previous
+	var b := _motion_current
+	var sample := {"position": (a["position"] as Vector2).lerp(b["position"], weight)}
+	for key: String in ["height", "time", "speed", "bob"]:
+		sample[key] = lerpf(float(a[key]), float(b[key]), weight)
+	sample["mode"] = b["mode"]
+	sample["side"] = b["side"]
+	sample["jump"] = float(b["jump"])
+	if a["mode"] == "jump" and b["mode"] != "jump":
+		# Landing may happen between rendered frames. Complete the turn at
+		# the same instant as the interpolated contact with the other wall.
+		sample["mode"] = "jump" if weight < 1.0 else b["mode"]
+		sample["side"] = a["side"] if weight < 1.0 else b["side"]
+		sample["jump"] = lerpf(float(a["jump"]), 1.0, weight)
+	elif b["mode"] == "jump":
+		var start := float(a["jump"]) if a["mode"] == "jump" else 0.0
+		sample["jump"] = lerpf(start, float(b["jump"]), weight)
+	return sample
+
+func _motion_matches_simulation() -> bool:
+	return not _motion_current.is_empty() and absf(float(_motion_current["time"]) - run_time) <= 0.000001 and (_motion_current["position"] as Vector2).distance_to(player_position()) <= 0.01
+
+func _render_motion(alpha: float) -> void:
+	if _motion_waiting_resume:
+		return
+	if not _motion_matches_simulation():
+		# A restored checkpoint or an externally positioned debug fixture is
+		# a new trajectory, not a span across an entire world's height.
+		_reset_motion_interpolation()
+	_motion_rendered = _sample_motion(alpha)
+	gecko.position = _motion_rendered["position"]
+	gecko.set_render_motion(str(_motion_rendered["mode"]), int(_motion_rendered["side"]), float(_motion_rendered["jump"]))
+	course.render_time = float(_motion_rendered["time"])
+	course.queue_redraw()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE or event.keycode == KEY_P:
@@ -166,6 +234,7 @@ func jump() -> bool:
 	from_side = side
 	target_side = -side
 	jump_elapsed = 0.0
+	gecko.jump_progress = 0.0
 	gecko.mode = "jump"
 	gecko.launch()
 	Audio.play_sound("jump")
@@ -189,6 +258,7 @@ func _physics_process(delta: float) -> void:
 func _simulate_step(delta: float) -> void:
 	if state != State.RUNNING:
 		return
+	_begin_motion_step()
 	var previous_at := player_position()
 	var previous_time := run_time
 	run_time += delta
@@ -214,6 +284,7 @@ func _simulate_step(delta: float) -> void:
 	var at: Vector2 = player_position()
 	gecko.position = at
 	gecko.run_speed_factor = current_speed() / RushTuning.START_SPEED
+	_motion_current = _capture_motion()
 	if not center_event in ["enter", "ride", "exit"]:
 		var contact: String = course.collision_kind_along(previous_at, at, previous_time, run_time, PLAYER_RADIUS)
 		if not contact.is_empty():
@@ -406,7 +477,10 @@ func _update_center_visual(night: float) -> void:
 func _process(delta: float) -> void:
 	if environment == null:
 		return
-	var night := RushTuning.night_amount(run_time) if state != State.MENU and state != State.PANEL else 0.0
+	if state == State.RUNNING:
+		_render_motion(Engine.get_physics_interpolation_fraction())
+	var visual_time := float(_motion_rendered.get("time", run_time)) if state in [State.RUNNING, State.PAUSED, State.RESUMING] else run_time
+	var night := RushTuning.night_amount(visual_time) if state != State.MENU and state != State.PANEL else 0.0
 	environment.night_amount = night
 	course.night_amount = night
 	gecko.night_amount = night
@@ -433,6 +507,7 @@ func _process(delta: float) -> void:
 			state = State.RUNNING
 			gecko.mode = "run"
 			gecko.position = player_position()
+			_reset_motion_interpolation()
 			ui.show_hud()
 			ui.fade_in(0.3)
 			_store_resume()
@@ -460,9 +535,11 @@ func _update_camera(delta: float) -> void:
 		return
 	var target_height: float = maxf(max_height_px - 130.0, 0.0)
 	if state == State.RUNNING:
-		var bob := sin(clampf(jump_elapsed / JUMP_DURATION, 0.0, 1.0) * PI) * JUMP_ARC if jump_elapsed >= 0.0 else 0.0
-		# Cancel the speed-dependent follow lag, while retaining the visible jump arc.
-		target_height += current_speed() / 7.5 - bob
+		var visual := _motion_rendered if _motion_matches_simulation() and not _motion_rendered.is_empty() else _capture_motion()
+		# The camera and runner sample the same time. Mixing a 120 Hz body
+		# with a per-frame camera caused a visible sawtooth at 240 Hz.
+		target_height = maxf(float(visual["height"]) - 130.0, 0.0)
+		target_height += float(visual["speed"]) / 7.5 - float(visual["bob"])
 	if state == State.MENU or state == State.PANEL:
 		target_height = 0.0
 	if delta > 0.0 and not state in [State.PAUSED, State.RESUMING]:
@@ -543,6 +620,10 @@ func _show_menu() -> void:
 	gecko.position = Vector2(365.0, 73.0 - GeckoVisual.GROUND_FEET_Y)
 	gecko.mode = "sleep"
 	gecko.side = -1
+	_motion_previous.clear()
+	_motion_current.clear()
+	_motion_rendered.clear()
+	_motion_waiting_resume = false
 	effects.clear()
 	ui.show_menu()
 	ui.fade_in(0.25)
@@ -579,6 +660,10 @@ func _start_run(quick: bool) -> void:
 	gecko.side = -1
 	gecko.position = Vector2(365.0, 73.0 - GeckoVisual.GROUND_FEET_Y)
 	gecko.mode = "sleep"
+	_motion_previous.clear()
+	_motion_current.clear()
+	_motion_rendered.clear()
+	_motion_waiting_resume = false
 	effects.clear()
 	state = State.TRANSITION
 	transition_clock = 0.0
@@ -594,6 +679,7 @@ func _die(cause: String = "impact") -> void:
 	if state != State.RUNNING:
 		return
 	state = State.DYING
+	gecko.clear_render_motion()
 	death_clock = 0.0
 	death_kind = cause
 	camera_shake = 7.0 if cause == "electric" else 13.0
@@ -712,6 +798,7 @@ func _tick_resume_countdown(delta: float) -> void:
 	if resume_elapsed >= RESUME_COUNTDOWN_SECONDS:
 		_hide_resume_countdown()
 		state = State.RUNNING
+		_motion_waiting_resume = true
 		ui.set_hint_visible(run_jumps == 0)
 		return
 	_update_resume_digit()
@@ -802,6 +889,7 @@ func _restore_run() -> void:
 	if center_event != "off" and RushTuning.night_amount(run_time) > 0.001:
 		_cancel_center_for_night()
 	effects.clear()
+	_reset_motion_interpolation()
 	state = State.PAUSED
 	_set_run_visuals_frozen(true)
 	_update_center_visual(RushTuning.night_amount(run_time))
@@ -842,6 +930,7 @@ func _notification(what: int) -> void:
 			gecko.mode = "run"
 			gecko.side = side
 			gecko.position = player_position()
+			_reset_motion_interpolation()
 			_pause_run()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if state in [State.RUNNING, State.RESUMING]:

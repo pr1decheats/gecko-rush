@@ -1,0 +1,31 @@
+{
+  "version": "2.8.0",
+  "build": 10,
+  "files": {
+    "assets/app-icon.png": "150457996b6cf228e016a05b2cc2aa184b97fee2038c153b3b8ee266b891c5c7",
+    "assets/fonts/Apache-2.0.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "assets/fonts/LICENSE-OpenSans.txt": "1a52a3cabac18881cf495230a4d08dc3535dd8b9fc32d8ee413c80113833359b",
+    "assets/fonts/OpenSans-Bold.ttf": "5894a3649b213cf5b2d673b6e7a871815fd1d120fa68a463592f27db14eae323",
+    "assets/fonts/OpenSans-Regular.ttf": "e64e508b2aa2880f907e470c4550980ec4c0694d103a43f36150ac3f93189bee",
+    "assets/icon.svg": "fd94502ba3dd671212cfd893a680d30bec9c9739ea6327a25235664c7b9f06f5",
+    "assets/triada-games-launch.png": "5019c2fa9dcf3b066e38ae847cfe7b1e065a1dbade5302cc408d68505c1416f3",
+    "assets/triada-games.png": "59f25a432ae2f364524569d1afa703e01fd1632e1684c6d8d3cb52eb55063e84",
+    "assets/triada-logo.gdshader": "90afbb6ed42e48193d2dacad4c34ba11c801f6b9c1114b18afb68a1a79531fd3",
+    "scripts/android_refresh.gd": "13c68a6418e3ed975b40d783bbccac1d4580aa5bf4364f1940c62e00e52aaead",
+    "scripts/audio.gd": "44b39dc85d0bd96aac4aaac597d8a607d074af2576427d4e50d7fe3bbdd7d071",
+    "scripts/boot.gd": "4edf0837466606141f2a052385b4d36dbd96e6219f71c93e534cca4447e1a8e6",
+    "scripts/center_wall.gd": "ddefc23e9912e5fcdce3c3291bf2fe33a7395d90b6e519c7f5a4a3c0eaf74c43",
+    "scripts/course.gd": "4f9fc10f10b04773273075e17be8a693d966254ebec77f9b847cb54441e1a0ac",
+    "scripts/effects.gd": "8b8e91f49806b8122b0aeb7b21ef7ce5e83e9c318155b26d97645031538e1fbb",
+    "scripts/environment.gd": "2571ce78d747f88b7c0422b392c1c01d9086513645b07a2e9060ba2b7c23c320",
+    "scripts/gecko.gd": "36969b01427cf44b39029a97a8c815b1eecccbdcf937caa3db91abb51b4af68f",
+    "scripts/l10n.gd": "c8bae717c55db85e326f172765d4c0352f2bfc81149e4fdc9636c1279e9ad823",
+    "scripts/main.gd": "4906838f22ab96fd133faee6b5b161a896965db73a1fae51da1bb96ff4212555",
+    "scripts/progress.gd": "2a0fb4ede818f9e7b40c136a823f2f81b3b26d186e1b57243e7639c6517ad788",
+    "scripts/tuning.gd": "93efddd460f4e670eb6384cbb37437c8aa401070a342d680f51211f15332be42",
+    "scripts/ui.gd": "ae0ccbac60aeb0a9851ae73ed5c2ec85403e57f2f30853978c7abaff1a26fbbe",
+    "scenes/boot.tscn": "ee0b471e3c00309245ce14c274d2b1f7a92a40d76f499fc53633510e756fe3e4",
+    "scenes/main.tscn": "6bff87af0fc156f02470c324f185fd6498c45ed3521f7ef21b923670456fd96f",
+    "project.godot": "3368dec4c259f73b8056b3319d02fc03209d4a471488393c129d11a0003fa3bb"
+  }
+}

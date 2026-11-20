@@ -66,6 +66,31 @@ var _electro_kind := "run"
 var _ash_positions := PackedVector2Array()
 var _ash_velocities := PackedVector2Array()
 var _ash_sizes := PackedFloat32Array()
+# Main supplies a render-only sample; gameplay still reads mode/side/progress.
+var _render_motion: Dictionary = {}
+
+func set_render_motion(kind: String, wall_side: int, progress: float) -> void:
+	_render_motion = {"mode": kind, "side": wall_side, "jump": clampf(progress, 0.0, 1.0)}
+	queue_redraw()
+
+func clear_render_motion() -> void:
+	_render_motion.clear()
+	queue_redraw()
+
+func _motion_mode() -> String:
+	return str(_render_motion.get("mode", mode))
+
+func _motion_side() -> int:
+	return int(_render_motion.get("side", side))
+
+func _motion_jump() -> float:
+	return float(_render_motion.get("jump", jump_progress))
+
+func _jump_projection(progress: float, wall_side: int) -> Vector2:
+	# A continuous half turn, rather than changing reflection on one frame.
+	# The unprojected torso volume keeps the narrow, edge-on middle visible.
+	var turn := smoothstep(0.18, 0.82, clampf(progress, 0.0, 1.0)) * PI
+	return Vector2(-float(wall_side) * cos(turn), -float(wall_side) * sin(progress * PI) * 0.82)
 
 func _ready() -> void:
 	# Every visible pose is drawn from the rig, including sleep and waking.
@@ -122,6 +147,7 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func reset_animation() -> void:
+	clear_render_motion()
 	_clock = 0.0
 	_stride_phase = 0.0
 	_tail_phase = 0.0
@@ -156,11 +182,10 @@ func set_launch_pose(fraction: float) -> void:
 func electrocute() -> void:
 	var was_jump := mode == "jump"
 	_electro_clock = 0.0
-	_electro_direction = float(-side)
-	_electro_angle = -float(side) * sin(jump_progress * PI) * 1.08 if was_jump else 0.0
+	var projection := _jump_projection(jump_progress, side) if was_jump else Vector2(float(-side), 0.0)
+	_electro_direction = projection.x
+	_electro_angle = projection.y
 	_electro_kind = "jump" if was_jump else "run"
-	if was_jump and jump_progress > 0.72:
-		_electro_direction = float(side)
 	mode = "electrocuted"
 	_eat_clock = -1.0
 	_hurt = 0.0
@@ -216,24 +241,22 @@ func get_render_pose() -> Dictionary:
 		return _wake_pose()
 	return _profile_pose()
 
-func _character_transform() -> Transform2D:
-	var direction := float(-side)
-	var angle := 0.0
-	if mode == "jump":
-		angle = -float(side) * sin(jump_progress * PI) * 1.08
-		if jump_progress > 0.72:
-			direction = float(side)
+func _character_transform(rendered: bool = false) -> Transform2D:
+	var visual_mode := _motion_mode() if rendered else mode
+	var visual_side := _motion_side() if rendered else side
+	var progress := _motion_jump() if rendered else jump_progress
+	var projection := _jump_projection(progress, visual_side) if visual_mode == "jump" else Vector2(float(-visual_side), 0.0)
 	var squash := _landing * 0.06
-	var body_scale := Vector2(direction * (1.0 + squash), stretch * (1.0 - squash + _launch * 0.045)) * PIXEL_SCALE
-	return Transform2D(angle, body_scale, 0.0, Vector2.ZERO)
+	var body_scale := Vector2(projection.x * (1.0 + squash), stretch * (1.0 - squash + _launch * 0.045)) * PIXEL_SCALE
+	return Transform2D(projection.y, body_scale, 0.0, Vector2.ZERO)
 
-func get_mouth_position() -> Vector2:
+func get_mouth_position(rendered: bool = false) -> Vector2:
 	var pose := get_render_pose()
-	return _character_transform() * (_head_point(pose, Vector2(-14.0, 5.0)) - ORIGIN)
+	return _character_transform(rendered) * (_head_point(pose, Vector2(-14.0, 5.0)) - ORIGIN)
 
 func get_tongue_geometry() -> Dictionary:
-	var mouth := get_mouth_position()
-	var active := _eat_clock >= 0.0 and _eat_clock < TONGUE_RETRACT_SECONDS and mode in ["run", "idle", "wake_climb", "climb_launch"]
+	var mouth := get_mouth_position(true)
+	var active := _eat_clock >= 0.0 and _eat_clock < TONGUE_RETRACT_SECONDS and _motion_mode() in ["run", "idle", "wake_climb", "climb_launch"]
 	var reach := 0.0
 	if active:
 		reach = smoothstep(0.0, TONGUE_EXTEND_SECONDS, _eat_clock) if _eat_clock <= TONGUE_EXTEND_SECONDS else 1.0 - smoothstep(TONGUE_EXTEND_SECONDS, TONGUE_RETRACT_SECONDS, _eat_clock)
@@ -538,7 +561,7 @@ func _profile_limb_points(front: bool, back: bool, kind: String, amount: float =
 	var cycle := fposmod(phase / TAU, 1.0)
 	var lift := 0.0
 	var stride := 0.0
-	if kind == "run":
+	if kind in ["run", "jump"]:
 		if cycle < 0.63:
 			stride = lerpf(-8.0, 8.0, smoothstep(0.0, 0.63, cycle))
 		else:
@@ -556,8 +579,11 @@ func _profile_limb_points(front: bool, back: bool, kind: String, amount: float =
 	if back:
 		elbow.x -= 4.0
 	if kind == "jump":
-		elbow = Vector2(43.0 if front else 46.0, y + (-6.0 if front else 10.0))
-		foot = elbow + Vector2(-8.0, -7.0 if front else 6.0)
+		var p := _motion_jump()
+		var fold := smoothstep(0.0, 0.20, p) * (1.0 - smoothstep(0.75, 1.0, p))
+		var tucked := Vector2(43.0 if front else 46.0, y + (-6.0 if front else 10.0))
+		elbow = elbow.lerp(tucked, fold)
+		foot = foot.lerp(tucked + Vector2(-8.0, -7.0 if front else 6.0), fold)
 	return PackedVector2Array([shoulder, elbow, foot])
 
 func _limb_ribbon(points: PackedVector2Array, widths: Vector3, color: Color) -> void:
@@ -667,8 +693,17 @@ func _draw_wake(pose: Dictionary, blink: int, direction: float, tint: Color) -> 
 func _draw_profile(kind: String, blink: int, direction: float, angle: float, tint: Color, shift: Vector2 = Vector2.ZERO) -> void:
 	var squash := _landing * 0.06
 	var scale2 := Vector2(direction * (1.0 + squash), (1.0 - squash + _launch * 0.045) * stretch) * PIXEL_SCALE
-	draw_set_transform(shift, angle, scale2)
 	var pose := _profile_pose()
+	if kind == "jump":
+		# The gecko turns in depth. Its profile narrows while a rounded body
+		# remains visible behind it, including at the exact half-turn frame.
+		var volume := sin(smoothstep(0.18, 0.82, _motion_jump()) * PI)
+		if volume > 0.01:
+			draw_set_transform(shift, angle, Vector2(volume * 0.52, scale2.y / PIXEL_SCALE) * PIXEL_SCALE)
+			_draw_pose_tail(pose, tint)
+			_draw_pose_body(pose, tint, blink, false)
+			_draw_pose_head(pose, tint, blink)
+	draw_set_transform(shift, angle, scale2)
 	_draw_costume_back(pose, tint)
 	_draw_pose_tail(pose, tint)
 	_draw_limbs(true, kind, tint)
@@ -760,14 +795,12 @@ func _draw() -> void:
 	if mode == "electrocuted":
 		_draw_electro()
 		return
-	var kind := "jump" if mode == "jump" else ("run" if mode == "run" else "idle")
+	var visual_mode := _motion_mode()
+	var kind := "jump" if visual_mode == "jump" else ("run" if visual_mode == "run" else "idle")
 	var blink := 1 if _blink_amount() > 0.95 else 0
-	var direction := float(-side)
-	var angle := 0.0
-	if kind == "jump":
-		angle = -float(side) * sin(jump_progress * PI) * 1.08
-		if jump_progress > 0.72:
-			direction = float(side)
+	var projection := _jump_projection(_motion_jump(), _motion_side()) if kind == "jump" else Vector2(float(-_motion_side()), 0.0)
+	var direction := projection.x
+	var angle := projection.y
 	var tint := Color.WHITE.lerp(Color("d0ecff"), night_amount * 0.1)
 	if mode == "hit":
 		tint = tint.lerp(Color("ff998e"), _hurt)

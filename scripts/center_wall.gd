@@ -40,24 +40,32 @@ func _noise(value: int) -> float:
 func _ensure_texture() -> void:
 	if _brick_texture != null:
 		return
-	var image := Image.create(48, 96, false, Image.FORMAT_RGBA8)
-	image.fill(Color("617e79"))
-	# Six softly lit masonry courses. The outer two pixels remain a crisp edge.
+	# Native logical resolution keeps the narrow refuge as crisp as the side
+	# walls. The visual texture does not change its 56 px collision lane.
+	var image := Image.create(56, 192, false, Image.FORMAT_RGBA8)
+	image.fill(Color("344d50"))
 	for row in range(6):
-		var y: int = row * 16
-		image.fill_rect(Rect2i(2, y + 1, 44, 14), Color("77938a"))
-		image.fill_rect(Rect2i(3, y + 2, 42, 2), Color("8aa599"))
-		image.fill_rect(Rect2i(3, y + 13, 42, 2), Color("516d6b"))
-		var seam: int = 16 if row % 2 == 0 else 31
-		image.fill_rect(Rect2i(seam, y + 2, 2, 13), Color("526f6c"))
-		for chip in range(4):
-			var x: int = 5 + int(_noise(row * 19 + chip * 7 + 13) * 35.0)
-			var cy: int = y + 5 + int(_noise(row * 23 + chip * 11 + 41) * 6.0)
-			image.fill_rect(Rect2i(x, cy, 2 + chip % 2, 1), Color("6a887e"))
-	image.fill_rect(Rect2i(0, 0, 2, 96), Color("3e5c60"))
-	image.fill_rect(Rect2i(2, 0, 1, 96), Color("a2b3a0"))
-	image.fill_rect(Rect2i(45, 0, 1, 96), Color("a2b3a0"))
-	image.fill_rect(Rect2i(46, 0, 2, 96), Color("3e5c60"))
+		var y: int = row * 32
+		var seam: int = 20 if row % 2 == 0 else 36
+		for span: Vector2i in [Vector2i(3, seam - 1), Vector2i(seam + 2, 53)]:
+			var width: int = span.y - span.x
+			var base := Color("758b83").lightened(_noise(row * 17 + span.x) * 0.06)
+			image.fill_rect(Rect2i(span.x, y + 2, width, 28), base.darkened(0.16))
+			image.fill_rect(Rect2i(span.x + 1, y + 3, width - 2, 24), base)
+			image.fill_rect(Rect2i(span.x + 2, y + 3, width - 4, 2), base.lightened(0.20))
+			image.fill_rect(Rect2i(span.x + 1, y + 5, 1, 19), base.lightened(0.11))
+			image.fill_rect(Rect2i(span.y - 2, y + 5, 1, 22), base.darkened(0.20))
+			image.fill_rect(Rect2i(span.x + 2, y + 26, width - 3, 2), base.darkened(0.25))
+			for chip in range(3):
+				var x: int = span.x + 3 + int(_noise(row * 31 + chip * 7 + span.x) * float(maxi(1, width - 7)))
+				var cy: int = y + 8 + int(_noise(row * 23 + chip * 11 + span.x) * 13.0)
+				image.fill_rect(Rect2i(x, cy, 2, 1), base.darkened(0.15))
+				image.fill_rect(Rect2i(x, cy + 1, 1, 1), base.lightened(0.09))
+	# A continuous inset edge makes the safe wall distinct from hazards.
+	image.fill_rect(Rect2i(0, 0, 2, 192), Color("243c42"))
+	image.fill_rect(Rect2i(2, 0, 1, 192), Color("adc0a6"))
+	image.fill_rect(Rect2i(53, 0, 1, 192), Color("829c8e"))
+	image.fill_rect(Rect2i(54, 0, 2, 192), Color("243c42"))
 	_brick_texture = ImageTexture.create_from_image(image)
 
 func _visible_alpha() -> float:

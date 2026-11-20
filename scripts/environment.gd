@@ -9,6 +9,7 @@ const WALL_LEFT: float = 270.0
 const WALL_RIGHT: float = 810.0
 const PIXEL_SCALE: float = 2.0
 const TILE_HEIGHT: float = 320.0
+const WALL_VARIANTS: int = 6
 const SKY_IMAGE_HEIGHT: int = 1536
 const SCENERY_HEIGHT: int = 1024
 
@@ -463,51 +464,181 @@ func _moss(image: Image, x: int, y: int, width: int, palette: Dictionary, salt: 
 		if index % 12 == 0:
 			_rect(image, x + index + 1, y - 1, 2, 2, _c(palette, "leaf_light"))
 
-func _wall_tile(id: String, palette: Dictionary, variant: int) -> Texture2D:
-	var image := Image.create(135, 160, false, Image.FORMAT_RGBA8)
-	image.fill(_c(palette, "dark"))
-	for row in range(5):
-		var offset: int = -18 if row % 2 == 0 else -40
-		for column in range(4):
-			var at := Vector2i(offset + column * 48, row * 32)
-			_brick(image, at, 47, 31, palette, variant * 117 + row * 37 + column * 19)
-			if id in ["jungle", "sky"] and (column + row + variant) % 3 == 0:
-				_moss(image, at.x + 3, at.y + 2, 30, palette, row + variant * 4)
-			elif id == "canyon":
-				_rect(image, at.x + 5, at.y + 17, 35, 1, _c(palette, "light").darkened(0.25))
-				_rect(image, at.x + 8, at.y + 21, 31, 1, _c(palette, "dark").lightened(0.1))
-			elif id == "ice":
-				_rect(image, at.x + 3, at.y + 2, 36, 2, _c(palette, "leaf_light"))
-				_line(image, at + Vector2i(16, 7), at + Vector2i(27, 18), _c(palette, "accent"))
-				_line(image, at + Vector2i(27, 18), at + Vector2i(23, 28), _c(palette, "light"))
-	# A shaded inner edge gives a narrow, strongly readable vertical corridor.
-	_rect(image, 128, 0, 7, 160, _c(palette, "rock").lightened(0.10))
-	_rect(image, 133, 0, 2, 160, _c(palette, "light").darkened(0.08))
-	_rect(image, 125, 0, 3, 160, _c(palette, "dark").lightened(0.05))
-	if id in ["jungle", "sky"]:
-		for patch in range(6):
-			var y: int = 12 + patch * 27 + variant * 3
-			_moss(image, 118, y, 16, palette, patch * 17)
-			_rect(image, 131, y + 4, 2, 13, _c(palette, "leaf"))
-	elif id == "crystal":
-		for gem in range(4):
-			var p := Vector2i(97 + gem % 2 * 16, 20 + gem * 35)
-			var color := _c(palette, "accent") if gem % 2 == 0 else Color("b095dd").darkened(0.15)
-			_polygon(image, [p + Vector2i(-5, 14), p + Vector2i(-5, -6), p + Vector2i(0, -15), p + Vector2i(6, -5), p + Vector2i(6, 13)], color.darkened(0.12))
-			_line(image, p + Vector2i(0, -12), p + Vector2i(0, 11), color.lightened(0.22), 2)
-	elif id == "volcano":
-		var base := Vector2i(73 + variant * 8, 22)
-		var glow := _c(palette, "accent")
-		_line(image, base, base + Vector2i(-15, 22), glow.darkened(0.5), 4)
-		_line(image, base + Vector2i(-15, 22), base + Vector2i(4, 53), glow.darkened(0.5), 4)
-		_line(image, base, base + Vector2i(-15, 22), glow, 1)
-		_line(image, base + Vector2i(-15, 22), base + Vector2i(4, 53), glow, 1)
+func _wall_stone(image: Image, at: Vector2i, width: int, height: int, palette: Dictionary, id: String, salt: int) -> void:
+	# Native-pixel masonry: a deep joint, broad bevels and a quiet, solid face.
+	# Keeping texture detail inside the bevel also keeps each silhouette legible.
+	var variation := (_noise(salt * 7 + 31) - 0.5) * 0.13
+	var rock := _c(palette, "rock").lightened(variation)
+	var light := rock.lerp(_c(palette, "light"), 0.48)
+	var dark := _c(palette, "dark")
+	var cut := 4 + int(_noise(salt + 4) * 4.0)
+	var x := at.x
+	var y := at.y
+	var right := x + width
+	var bottom := y + height
+	_polygon(image, [Vector2i(x + cut, y), Vector2i(right - cut, y), Vector2i(right, y + cut), Vector2i(right, bottom - cut), Vector2i(right - cut, bottom), Vector2i(x + cut, bottom), Vector2i(x, bottom - cut), Vector2i(x, y + cut)], dark.darkened(0.13))
+	_polygon(image, [Vector2i(x + cut + 1, y + 1), Vector2i(right - cut, y + 1), Vector2i(right - 2, y + cut), Vector2i(right - 3, bottom - cut), Vector2i(right - cut, bottom - 2), Vector2i(x + cut, bottom - 2), Vector2i(x + 2, bottom - cut), Vector2i(x + 2, y + cut)], rock.darkened(0.19))
+	_polygon(image, [Vector2i(x + cut + 1, y + 2), Vector2i(right - cut - 1, y + 2), Vector2i(right - 6, y + 8), Vector2i(x + 8, y + 8), Vector2i(x + 3, y + cut + 2)], light)
+	_polygon(image, [Vector2i(x + 3, y + cut + 2), Vector2i(x + 8, y + 8), Vector2i(x + 8, bottom - 9), Vector2i(x + cut, bottom - 4), Vector2i(x + 3, bottom - cut)], rock.lerp(light, 0.43))
+	_polygon(image, [Vector2i(x + 8, bottom - 9), Vector2i(right - 8, bottom - 9), Vector2i(right - cut - 1, bottom - 3), Vector2i(x + cut, bottom - 3)], rock.darkened(0.28))
+	_polygon(image, [Vector2i(right - 8, y + 8), Vector2i(right - 3, y + cut + 2), Vector2i(right - 3, bottom - cut - 1), Vector2i(right - 8, bottom - 9)], rock.darkened(0.25))
+	_polygon(image, [Vector2i(x + 9, y + 8), Vector2i(right - 9, y + 8), Vector2i(right - 7, y + 13), Vector2i(right - 8, bottom - 10), Vector2i(x + 10, bottom - 9), Vector2i(x + 7, bottom - 15), Vector2i(x + 7, y + 14)], rock)
+	# Large, low-contrast planes give volume without sparkling noise at speed.
+	_polygon(image, [Vector2i(x + 10, y + 9), Vector2i(right - 10, y + 9), Vector2i(right - 15, y + 20), Vector2i(x + width / 2, y + 27), Vector2i(x + 8, y + 19)], rock.lightened(0.035))
+	_polygon(image, [Vector2i(x + 12, bottom - 13), Vector2i(x + width / 2, bottom - 25), Vector2i(right - 9, bottom - 21), Vector2i(right - 9, bottom - 11)], rock.darkened(0.045))
+	_line(image, Vector2i(x + cut + 3, y + 2), Vector2i(right - cut - 5, y + 2), light.lightened(0.08))
+	if id == "canyon":
+		for band in range(3):
+			var level := y + 18 + band * 11
+			var bend := 2 + int(_noise(salt + band * 29) * 3.0)
+			var tint := rock.lerp(_c(palette, "light"), 0.19) if band % 2 == 0 else rock.darkened(0.14)
+			_line(image, Vector2i(x + 10, level), Vector2i(x + width / 2, level + bend), tint, 2)
+			_line(image, Vector2i(x + width / 2, level + bend), Vector2i(right - 10, level + 1), tint, 2)
+		_line(image, Vector2i(x + 16, bottom - 11), Vector2i(right - 20, bottom - 12), rock.lightened(0.13))
 	elif id == "ice":
-		for spike in range(4):
-			var p := Vector2i(109 + spike % 2 * 9, 22 + spike * 36)
-			_polygon(image, [p, p + Vector2i(9, 0), p + Vector2i(4, 17)], _c(palette, "light"))
-	return ImageTexture.create_from_image(image)
+		var frost := _c(palette, "leaf_light")
+		_line(image, Vector2i(x + cut + 4, y + 3), Vector2i(right - cut - 5, y + 3), frost, 2)
+		for tooth in range(4):
+			var fx := x + 14 + tooth * maxi(8, (width - 26) / 4)
+			var length := 3 + int(_noise(salt + tooth * 23) * 7.0)
+			_polygon(image, [Vector2i(fx - 3, y + 4), Vector2i(fx + 5, y + 4), Vector2i(fx + 1, y + 5 + length)], frost.darkened(0.05))
+		var direction := 1 if salt % 2 else -1
+		var origin := Vector2i(x + width / 2 - direction * 9 + salt % 7, y + 14 + salt % 4)
+		var elbow := origin + Vector2i(direction * (9 + salt % 5), 11 + salt % 4)
+		var end := elbow + Vector2i(-direction * (5 + salt % 4), 12 + salt % 3)
+		_line(image, origin + Vector2i(1, 0), elbow + Vector2i(1, 0), rock.darkened(0.28), 2)
+		_line(image, elbow + Vector2i(1, 0), end + Vector2i(1, 0), rock.darkened(0.28), 2)
+		_line(image, origin, elbow, _c(palette, "accent").lerp(light, 0.4))
+		_line(image, elbow, end, frost.darkened(0.08))
+		_line(image, elbow, elbow + Vector2i(direction * 13, -3 - salt % 4), light)
+	elif id == "volcano":
+		_polygon(image, [Vector2i(x + 12, y + 20), Vector2i(x + width / 2, y + 13), Vector2i(right - 13, y + 26), Vector2i(right - 24, bottom - 15), Vector2i(x + 22, bottom - 14)], rock.darkened(0.09))
+		_line(image, Vector2i(x + 16, y + 20), Vector2i(x + width / 2 - 1, y + 13), rock.lightened(0.13))
+	elif id == "sky" and salt % 3 == 0:
+		var center := Vector2i(x + width / 2, y + height / 2)
+		var carving := rock.darkened(0.20)
+		var rim := rock.lerp(light, 0.43)
+		_line(image, center + Vector2i(-13, 5), center + Vector2i(0, -8), carving, 2)
+		_line(image, center + Vector2i(0, -8), center + Vector2i(13, 5), carving, 2)
+		_line(image, center + Vector2i(-9, 6), center + Vector2i(8, 6), rim)
+		_line(image, center + Vector2i(-1, 0), center + Vector2i(-1, 11), carving, 2)
+	# Weathered chips and occasional branching cracks, rather than repeated dots.
+	for chip in range(4):
+		var cx := x + 13 + int(_noise(salt * 11 + chip * 53) * float(maxi(1, width - 30)))
+		var cy := y + 15 + int(_noise(salt * 29 + chip * 17) * float(maxi(1, height - 31)))
+		_rect(image, cx, cy, 2 + chip % 3, 1, rock.darkened(0.11))
+		if chip % 2 == 0:
+			_rect(image, cx, cy + 1, 2, 1, rock.lightened(0.07))
+	if id != "ice" and _noise(salt + 39) > 0.53:
+		var origin := Vector2i(x + 17 + int(_noise(salt + 14) * float(maxi(1, width - 43))), y + 8)
+		var joint := origin + Vector2i(6, 11)
+		var end := joint + Vector2i(-4, 12)
+		_line(image, origin, joint, rock.darkened(0.30))
+		_line(image, joint, end, rock.darkened(0.30))
+		_line(image, joint + Vector2i(1, 1), end + Vector2i(1, 1), rock.lightened(0.09))
+		if salt % 2 == 0:
+			_line(image, joint, joint + Vector2i(10, 4), rock.darkened(0.25))
 
+func _wall_moss(image: Image, at: Vector2i, width: int, palette: Dictionary, salt: int) -> void:
+	var leaf := _c(palette, "leaf")
+	var highlight := leaf.lerp(_c(palette, "leaf_light"), 0.48)
+	_line(image, at + Vector2i(1, 4), at + Vector2i(width - 1, 4), leaf.darkened(0.32), 3)
+	for cluster in range(0, width - 3, 7):
+		var depth := 4 + int(_noise(salt * 19 + cluster) * 8.0)
+		var x := at.x + cluster
+		_polygon(image, [Vector2i(x, at.y + 1), Vector2i(x + 6, at.y), Vector2i(x + 7, at.y + depth - 3), Vector2i(x + 4, at.y + depth), Vector2i(x + 1, at.y + depth - 1)], leaf.darkened(0.10))
+		_rect(image, x + 1, at.y + 1, 5, 3, highlight)
+		_rect(image, x + 3, at.y + 4, 3, maxi(1, depth - 5), leaf)
+
+func _wall_gem(image: Image, at: Vector2i, palette: Dictionary, violet: bool) -> void:
+	var accent := _c(palette, "accent")
+	if violet:
+		accent = accent.lerp(Color("a98ac9"), 0.58)
+	var dark := _c(palette, "dark")
+	_polygon(image, [at + Vector2i(-11, 16), at + Vector2i(-10, -12), at + Vector2i(0, -25), at + Vector2i(11, -10), at + Vector2i(12, 15), at + Vector2i(3, 23)], dark.darkened(0.16))
+	_polygon(image, [at + Vector2i(-8, 13), at + Vector2i(-7, -10), at + Vector2i(0, -21), at + Vector2i(0, 19)], accent.darkened(0.20))
+	_polygon(image, [at + Vector2i(0, -21), at + Vector2i(8, -9), at + Vector2i(8, 12), at + Vector2i(0, 19)], accent.lerp(_c(palette, "rock"), 0.30))
+	_polygon(image, [at + Vector2i(-7, -10), at + Vector2i(0, -21), at + Vector2i(0, -3), at + Vector2i(-7, 5)], accent.lightened(0.25))
+	_line(image, at + Vector2i(0, -17), at + Vector2i(0, 16), accent.lightened(0.35))
+	_rect(image, at.x - 4, at.y - 11, 2, 5, accent.lightened(0.54))
+
+func _wall_tile(id: String, palette: Dictionary, variant: int) -> Texture2D:
+	# Wall pixels have their own density; backdrop/ground artwork retains its
+	# deliberately quieter pixel scale. These images are built only on a cache miss.
+	var image := Image.create(int(WALL_LEFT), int(TILE_HEIGHT), false, Image.FORMAT_RGBA8)
+	var dark := _c(palette, "dark")
+	var rock := _c(palette, "rock")
+	image.fill(dark)
+	for row in range(5):
+		var offset := -23 - (38 if row % 2 else 0) - (variant % 3) * 9
+		var x := offset
+		var column := 0
+		while x < 260:
+			var salt := variant * 173 + row * 47 + column * 29 + 13
+			var width := 88 + int(_noise(salt * 3 + 31) * 23.0)
+			if id == "canyon":
+				width += 12
+			elif id == "volcano":
+				width -= 7
+			_wall_stone(image, Vector2i(x, row * 64 + 2), width - 3, 59, palette, id, salt)
+			if id in ["jungle", "sky"] and (column + row + variant) % (3 if id == "jungle" else 5) == 0:
+				_wall_moss(image, Vector2i(x + 13, row * 64 + 5), mini(51, width - 25), palette, salt)
+			x += width
+			column += 1
+	# A small continuous front facet defines contact with the wall without
+	# moving either the collision boundary or the shaft's usable width.
+	_rect(image, 252, 0, 4, 320, dark.lerp(rock, 0.22))
+	_rect(image, 256, 0, 9, 320, rock.lightened(0.035))
+	_rect(image, 265, 0, 3, 320, rock.lerp(_c(palette, "light"), 0.38))
+	_rect(image, 268, 0, 2, 320, rock.darkened(0.18))
+	for row in range(5):
+		_rect(image, 256, row * 64 + 1, 14, 3, dark.lightened(0.025))
+		_line(image, Vector2i(257, row * 64 + 5), Vector2i(265, row * 64 + 5), rock.lerp(_c(palette, "light"), 0.5))
+	if id == "jungle":
+		for patch in range(4):
+			var p := Vector2i(224 + patch % 2 * 13, 18 + patch * 75 + variant % 3 * 4)
+			_wall_moss(image, p, 28, palette, patch * 37 + variant)
+			var vine := _c(palette, "leaf").darkened(0.19)
+			_line(image, p + Vector2i(18, 7), p + Vector2i(15, 24), vine, 2)
+			_line(image, p + Vector2i(15, 24), p + Vector2i(19, 40), vine, 2)
+			_polygon(image, [p + Vector2i(17, 26), p + Vector2i(9, 22), p + Vector2i(10, 29)], _c(palette, "leaf"))
+			_polygon(image, [p + Vector2i(18, 32), p + Vector2i(26, 29), p + Vector2i(25, 36)], _c(palette, "leaf").lightened(0.07))
+	elif id == "canyon":
+		for seam in range(3):
+			var y := 42 + seam * 109 + variant % 3 * 3
+			_line(image, Vector2i(257, y), Vector2i(265, y + 2), rock.darkened(0.19))
+			_line(image, Vector2i(257, y + 3), Vector2i(264, y + 5), rock.lerp(_c(palette, "light"), 0.40))
+	elif id == "ice":
+		for frost in range(4):
+			var y := 23 + frost * 78 + variant % 3 * 3
+			var rim := _c(palette, "leaf_light").lerp(rock, 0.15)
+			_line(image, Vector2i(258, y), Vector2i(266, y + 10), rim, 2)
+			_line(image, Vector2i(265, y + 9), Vector2i(259, y + 18), rim)
+	elif id == "crystal":
+		for gem in range(3):
+			var p := Vector2i(51 + ((gem * 71 + variant * 37) % 172), 45 + gem * 105 + variant % 2 * 11)
+			_wall_gem(image, p, palette, (gem + variant) % 2 == 0)
+	elif id == "volcano":
+		for vein in range(2):
+			var p := Vector2i(43 + (variant * 29 + vein * 113) % 154, 34 + vein * 171)
+			var bend := p + Vector2i(13, 18)
+			var end := bend + Vector2i(-9, 29)
+			var glow := _c(palette, "accent").lerp(rock, 0.32)
+			_line(image, p, bend, dark.darkened(0.26), 6)
+			_line(image, bend, end, dark.darkened(0.26), 6)
+			_line(image, p, bend, glow.darkened(0.30), 3)
+			_line(image, bend, end, glow.darkened(0.30), 3)
+			_line(image, p, bend, glow)
+			_line(image, bend, end, glow)
+			_line(image, bend, bend + Vector2i(11, 8), glow.darkened(0.16))
+	elif id == "sky":
+		for patch in range(2):
+			_wall_moss(image, Vector2i(229, 42 + patch * 181 + variant % 3 * 5), 27, palette, patch * 31 + variant)
+	# Every variant ends on the same masonry joint: neighboring cached tiles
+	# can be shuffled indefinitely, with no image edge, color step or transparency.
+	_rect(image, 0, 0, 270, 1, dark)
+	_rect(image, 0, 319, 270, 1, dark)
+	return ImageTexture.create_from_image(image)
 func _ground(id: String, palette: Dictionary, frame: int) -> Texture2D:
 	var image := Image.create(540, 240, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
@@ -582,7 +713,7 @@ func _build_world(id: String) -> Dictionary:
 	var walls_night: Array[Texture2D] = []
 	var scenery_day: Array[Texture2D] = []
 	var scenery_night: Array[Texture2D] = []
-	for variant in range(4):
+	for variant in range(WALL_VARIANTS):
 		walls_day.append(_wall_tile(id, day, variant))
 		walls_night.append(_wall_tile(id, night, variant))
 	for layer in range(2):
@@ -697,7 +828,7 @@ func _draw_wall(reflected: bool, blend: float) -> void:
 	var day_modulate: Color = _theme_modulate().lerp(Color.WHITE, 0.45)
 	day_modulate.a = visibility
 	for row in range(-1, rows):
-		var index: int = posmod(row - sector + (47 if reflected else 0), 4)
+		var index: int = posmod(row - sector + (47 if reflected else 0), WALL_VARIANTS)
 		var area := Rect2(0, float(row) * TILE_HEIGHT + offset, WALL_LEFT, TILE_HEIGHT)
 		_draw_pair(_active["wall_day"][index], _active["wall_night"][index], area, blend, day_modulate)
 	# The inside edges stay clean and never intrude into a player's collision lane.

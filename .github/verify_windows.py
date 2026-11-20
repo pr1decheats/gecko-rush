@@ -130,7 +130,7 @@ def inspect_version_info(data):
     return {**fixed, "strings": strings}
 
 
-def verify(exe_path, apk_path, apk_sha256, version="2.7.0", file_version="2.7.0.9", product_version="2.7.0.0", product_name="Gecko Rush"):
+def verify(exe_path, apk_path, apk_sha256, version="2.8.0", file_version="2.8.0.10", product_version="2.8.0.0", product_name="Gecko Rush"):
     data = exe_path.read_bytes()
     pe = inspect_pe(data)
     require(data[-4:] == b"GDPC" and len(data) >= 12, "Missing embedded PCK footer")
@@ -166,9 +166,9 @@ def main():
     parser.add_argument("--exe", required=True, type=Path)
     parser.add_argument("--apk", required=True, type=Path)
     parser.add_argument("--apk-sha256", required=True)
-    parser.add_argument("--version", default="2.7.0")
-    parser.add_argument("--file-version", default="2.7.0.9")
-    parser.add_argument("--product-version", default="2.7.0.0")
+    parser.add_argument("--version", default="2.8.0")
+    parser.add_argument("--file-version", default="2.8.0.10")
+    parser.add_argument("--product-version", default="2.8.0.0")
     parser.add_argument("--product-name", default="Gecko Rush")
     args = parser.parse_args()
     try:
