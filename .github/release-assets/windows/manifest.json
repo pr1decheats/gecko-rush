@@ -1,23 +1,23 @@
 {
-  "filename": "GeckoRush-2.7-Windows.zip",
-  "version": "2.7.0",
-  "size": 39908525,
-  "sha256": "947cfde28cee73c9066239c57498cd62d7714d649c2b461632d36765f6e75c6e",
+  "filename": "GeckoRush-2.8-Windows.zip",
+  "version": "2.8.0",
+  "size": 39920083,
+  "sha256": "dcf45e5d6bd3c9c73a081145302fb1a80e36d25d9a31221a47052648c4791fe9",
   "parts": [
     {
-      "file": "GeckoRush-2.7-windows.01.bin",
+      "file": "GeckoRush-2.8-windows.01.bin",
       "size": 18874368,
-      "sha256": "ee3989c5fd45723eba076c3d570eaf3fe5dfa8f7d3705cb92a4444b49959af08"
+      "sha256": "9c44fa5ce39ea507a1e4cf6637878c8ca21e1a077101d35891a0d816fd89465c"
     },
     {
-      "file": "GeckoRush-2.7-windows.02.bin",
+      "file": "GeckoRush-2.8-windows.02.bin",
       "size": 18874368,
-      "sha256": "1e4a34418496230675a56fab180726663ca929d8dca24b8c1e167de4f8fd2966"
+      "sha256": "cefde4fc893133257221fc3bc35e42e29ce69c0af053c25681bb15d0c51162ff"
     },
     {
-      "file": "GeckoRush-2.7-windows.03.bin",
-      "size": 2159789,
-      "sha256": "e664255eecfb66e88b062601254b12c6d8c711cad161c00a3b10921d86832b9f"
+      "file": "GeckoRush-2.8-windows.03.bin",
+      "size": 2171347,
+      "sha256": "09b91cda157ba6501cb78e713935b4a9a984f809e2aeb473f02f2c8dbaf2ea56"
     }
   ]
 }
