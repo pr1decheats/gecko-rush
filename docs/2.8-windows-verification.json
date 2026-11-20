@@ -1,0 +1,43 @@
+{
+  "result": "PASS",
+  "exe": "/workspace/work/v28-windows-app/GeckoRush.exe",
+  "exe_size": 108605152,
+  "exe_sha256": "3932a062b8e36cbccf212572e611aec9ddb09316a0c6b8ef22c7b564503ae121",
+  "project_version": "2.8.0",
+  "pe": {
+    "machine": "AMD64",
+    "optional_header": "PE32+",
+    "subsystem": "Windows GUI",
+    "icon_group_present": true,
+    "signed": false,
+    "metadata": {
+      "file_version": "2.8.0.10",
+      "product_version": "2.8.0.0",
+      "strings": {
+        "FileVersion": "2.8.0.10",
+        "ProductVersion": "2.8.0.0",
+        "ProductName": "Gecko Rush",
+        "FileDescription": "Gecko Rush",
+        "LegalCopyright": "Triada Games"
+      }
+    }
+  },
+  "pck": {
+    "godot": "4.6.3",
+    "format": 3,
+    "entries_md5_verified": 51,
+    "sha256": "a99532b3026674a184cdd5c7878dcd307f7d246ac7fd56b55af1bc7d7505b7c6",
+    "embedded_offset": 104700416,
+    "embedded_size": 3904724
+  },
+  "android": {
+    "apk": "/workspace/work/mobile-builds/GeckoRush-2.8.apk",
+    "apk_sha256": "9e361fa0c6bef1b0c186b6ddb48090763864c8280e3befa44361edc33ea23d86",
+    "compiled_scripts_identical": 13,
+    "illustrated_resources_identical": 0,
+    "branding_resources_identical": 8,
+    "character_renderer": "live articulated geometry",
+    "unused_character_atlases_absent": true
+  },
+  "runtime_limit": "Static package check; execute this exact EXE on Windows for launch validation."
+}

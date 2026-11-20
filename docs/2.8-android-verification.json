@@ -1,0 +1,35 @@
+{
+  "result": "PASS",
+  "filename": "GeckoRush-2.8.apk",
+  "version": "2.8.0",
+  "build": 10,
+  "size": 56414068,
+  "sha256": "9e361fa0c6bef1b0c186b6ddb48090763864c8280e3befa44361edc33ea23d86",
+  "certificate_matches_2_2": true,
+  "abis": [
+    "armeabi-v7a",
+    "arm64-v8a"
+  ],
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "zip_crc": "PASS",
+  "zip_elf_16kb": "PASS",
+  "permissions": [],
+  "debuggable": false,
+  "scripts": {
+    "scripts/android_refresh.gdc": "7358dc0d2c4ce92175a4e03bf0ea3eb8677d6d763010e7e4cf4bec495c5dbd2c",
+    "scripts/audio.gdc": "c952f5a46f65e813fe92b0e686efcce1d63992b3c3e8307f3714eefc0915d953",
+    "scripts/boot.gdc": "9c59f577d5a6e3e62f38d5b12b5ff25a05d3cbb3613e7d8f5dc86cc2dc1fac56",
+    "scripts/center_wall.gdc": "cdbf2ee5a9399e7009c57ae8df526263ecc3d3559f4958ecbb0f887f9c3ac71f",
+    "scripts/course.gdc": "11a0d0adf9a5a0437502f123df9e8f18e89beaede63dbdcd360ee4ab48fc979a",
+    "scripts/effects.gdc": "d433427e095bf09c22cf0ad376451074a4d4c020921e8e80f4710f833afc6fb2",
+    "scripts/environment.gdc": "de3eed2e278867951cf856dc8ddc00f1b94cf025c16146ca9cbbeae20694d337",
+    "scripts/gecko.gdc": "486fe973a098bc9355c186da58b69f4a902083c77b7af6e5ef5119beba2e6809",
+    "scripts/l10n.gdc": "de328a79b4aef3873e064368ba61e6a5ba96c3de42fe3c9163e92268c1006f47",
+    "scripts/main.gdc": "51316b4a2740e78b58f00a3630a4d94a4ffe6b5a31b873eb4ddbad494be7d874",
+    "scripts/progress.gdc": "5744420e32f25613c6946799913b370b829224e562a756ee54a8fda1b1ba32df",
+    "scripts/tuning.gdc": "a319804f43e11da701a8e8f1f4223473dc9bbe76eb0d5f6146dcdf2dce397596",
+    "scripts/ui.gdc": "c1b1124b9e22a48a6aaf62f3ad1cd4d16544d89806872b2e0832a3c80afa8a42"
+  },
+  "runtime_limit": "APK was not run on an Android device."
+}

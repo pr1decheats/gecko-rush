@@ -1,0 +1,89 @@
+{
+  "version": "2.8.0",
+  "build": 10,
+  "result": "PASS",
+  "headless_regressions": {
+    "suites": 21,
+    "checks": 85722,
+    "source_report": "validation-2.8-regressions.json"
+  },
+  "motion": {
+    "headless_checks": 15766,
+    "native_checks": 15782,
+    "rates_sampled": [
+      30,
+      60,
+      120,
+      240
+    ],
+    "world_height_samples_metres": [
+      0,
+      4000,
+      12000
+    ],
+    "identical_physics_vs_2_7": {
+      "seed": 441,
+      "ticks": 13919,
+      "snapshots": 118,
+      "metres": 2200,
+      "coins": 19,
+      "jumps": 96,
+      "differences": 0
+    },
+    "movie": {
+      "frames": 480,
+      "fps": 60,
+      "seconds": 8,
+      "width": 540,
+      "height": 960,
+      "real_jumps": 7
+    },
+    "limits": "Timestamp selection correctness and software-rendered captures; actual physical device/display FPS not measured.",
+    "automatic_production_engine_fraction": {
+      "distinct_fractions": 166,
+      "intermediate_render_frames_changed": 2,
+      "intermediate_render_frames_observed": 2,
+      "hardware_fps_measured": false
+    }
+  },
+  "character_native": {
+    "checks": 2092,
+    "skins": 21,
+    "dense_cape_wake_samples": 202
+  },
+  "walls_native": {
+    "checks": 1480,
+    "themes": 6,
+    "variants": 6,
+    "texture_pixels": [
+      270,
+      320
+    ],
+    "previous_texture_pixels": [
+      135,
+      160
+    ],
+    "cache_world_limit": 2
+  },
+  "hazards_native": {
+    "checks": 295,
+    "types": 24,
+    "collision_silhouettes_unchanged": true,
+    "day_night_world_captures": 12
+  },
+  "ui_native": {
+    "screenshots": 35,
+    "failures": 0,
+    "audio_driver": "Dummy"
+  },
+  "exported_pack": {
+    "checks": 153,
+    "failures": 0,
+    "compiled_scripts": 13,
+    "branding_resources_matching_apk": 8
+  },
+  "limitations": [
+    "No physical Android/iPhone installation, audio or hardware FPS testing.",
+    "Native Windows release startup validation is recorded separately by GitHub Actions."
+  ]
+}

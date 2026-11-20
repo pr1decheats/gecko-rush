@@ -218,6 +218,27 @@ func _test_collision() -> void:
 	game._physics_process(STEP)
 	check(game.state == game.State.DYING, "Collision uses authoritative simulation, never an interpolated/drawn Node2D")
 
+func _draw_native_frame(delta: float, alpha: float) -> void:
+	# The simulation is manual only to control the exact sampling rate.
+	# Advance every production visual component as ordinary main play does.
+	game._render_motion(alpha)
+	game._update_camera(delta)
+	var night := RushTuning.night_amount(float(game._motion_rendered.time))
+	game.environment.night_amount = night
+	game.course.night_amount = night
+	game.gecko.night_amount = night
+	game._update_center_visual(night)
+	game.ui.update_hud(game.max_height_px / RushTuning.PIXELS_PER_METRE, game.run_coins)
+	game.ui.update_cycle(RushTuning.is_night(game.run_time), RushTuning.cycle_remaining(game.run_time))
+	game.gecko._process(delta)
+	game.environment._process(delta)
+	game.effects.enabled = true
+	game.effects._process(delta)
+	game.effects.enabled = false
+	game.center_wall.animation_enabled = true
+	game.center_wall._process(delta)
+	game.center_wall.animation_enabled = false
+
 func _native_rates() -> void:
 	root.size = Vector2i(540, 960)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
@@ -237,9 +258,7 @@ func _native_rates() -> void:
 					game.jump()
 				game._physics_process(STEP)
 				ticks += 1
-			game._render_motion(clampf((frame_time - ticks * STEP) / STEP, 0.0, 1.0))
-			game._update_camera(1.0 / float(fps))
-			game.gecko._process(1.0 / float(fps))
+			_draw_native_frame(1.0 / float(fps), clampf((frame_time - ticks * STEP) / STEP, 0.0, 1.0))
 			if frame > 2 and game.gecko.position.distance_to(previous) > 0.0001:
 				advanced += 1
 			previous = game.gecko.position
@@ -264,9 +283,7 @@ func _capture_actual_course() -> void:
 		for tick in range(2):
 			_follow_route()
 			game._physics_process(STEP)
-		game._render_motion(0.5)
-		game._update_camera(1.0 / 60.0)
-		game.gecko._process(1.0 / 60.0)
+		_draw_native_frame(1.0 / 60.0, 0.5)
 		await RenderingServer.frame_post_draw
 		var image := root.get_texture().get_image()
 		image.save_png(folder.path_join("frame-%04d.png" % frames))
