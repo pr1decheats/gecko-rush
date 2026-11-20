@@ -1,0 +1,60 @@
+{
+  "result": "PASS",
+  "production_modified": false,
+  "game_native_screenshots": 35,
+  "shop_ui_checks": 525,
+  "shop_native_screenshots": 16,
+  "engine_errors": false,
+  "reviewed": [
+    "menu",
+    "world_ice",
+    "shop_ru_common",
+    "graphics_ru"
+  ],
+  "visual_review": "Compact attached character and sleeping pose visible at old gameplay scale; UI text/buttons fit portrait; 240FPS option visible on desktop. Site screenshots copied byte-for-byte without artwork edits.",
+  "existing_unrelated_text_note": "Graphics theme helper still says day/night change every40seconds, whereas current gameplay day40/night20. No production edits made.",
+  "site_assets": [
+    {
+      "file": "menu-mobile-27.png",
+      "source": "/workspace/work/v27-game-captures/menu.png",
+      "size": 104953,
+      "sha256": "34bf6635de7ccf75a705680baa32499b963563dfc4501efde433f5e1324e7b62",
+      "dimensions": [
+        540,
+        960
+      ],
+      "floor_alignment": "GROUND_FEET_Y95, parent-floor73"
+    },
+    {
+      "file": "world-mobile-27.png",
+      "source": "/workspace/work/v27-game-captures/world_ice.png",
+      "size": 87240,
+      "sha256": "14e4819c0c8ff283e1a174411f0bfb55d43bae1a6ff3c46bb2e127e87f786d57",
+      "dimensions": [
+        540,
+        960
+      ]
+    },
+    {
+      "file": "shop-mobile-27.png",
+      "source": "/workspace/work/v27-ui-captures/shop_ru_common.png",
+      "size": 56268,
+      "sha256": "329c9bfb26614b3e7b3694fa1e632c2f6d3029744814f4523208f725c408ebbe",
+      "dimensions": [
+        540,
+        960
+      ]
+    },
+    {
+      "file": "skins-27.png",
+      "source": "/workspace/work/v27-skin-captures/skins-run.png",
+      "size": 276920,
+      "sha256": "c830ad61af20a0f74a6713271c8f3a5109da37062b4a03080df37f5a2a694231",
+      "dimensions": [
+        1600,
+        1200
+      ]
+    }
+  ],
+  "final_menu_floor_check": "PASS"
+}

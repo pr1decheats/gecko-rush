@@ -85,11 +85,11 @@ func _setup() -> void:
 	moving_holder.position = Vector2(796, 383)
 	root.add_child(moving_holder)
 	_actor("standard_green", Vector2.ZERO, -1, moving_holder)
-	_actor("standard_green", Vector2(1120, 390), -1)
+	_actor("standard_green", Vector2(1120, 578.0 - GECKO.GROUND_FEET_Y * 2.0), -1)
 	actors[3].mode = "sleep"
 	_label("Живые лапы и хвост", Vector2(20, 617), 17, Color("a9c3b2"), 280)
-	_label("Единый подвижный персонаж", Vector2(340, 617), 17, Color("a9c3b2"), 280)
-	_label("Без растягивания за спиной", Vector2(660, 617), 17, Color("a9c3b2"), 280)
+	_label("Костюм повторяет движения", Vector2(340, 617), 17, Color("a9c3b2"), 280)
+	_label("Муха втягивается к пасти", Vector2(660, 617), 17, Color("a9c3b2"), 280)
 	_label("Одна цельная модель", Vector2(980, 617), 17, Color("a9c3b2"), 280)
 	ready_to_capture = true
 	process_frame.connect(_advance)
@@ -105,7 +105,7 @@ func _advance() -> void:
 	actors[2].position.y -= 18000.0 * DELTA
 	moving_holder.position.y = 383.0 - actors[2].position.y
 	if frame % 62 == 8:
-		actors[2].eat_to(actors[2].get_mouth_position() + Vector2(-7, -82))
+		actors[2].eat_to(actors[2].get_mouth_position() + Vector2(-30, -42))
 	actors[2]._process(DELTA)
 	if time < 0.62:
 		actors[3].mode = "sleep"
@@ -113,7 +113,7 @@ func _advance() -> void:
 		actors[3].set_launch_pose((time - 0.62) / 1.04)
 	else:
 		actors[3].mode = "run"
-		actors[3].position.y = 390.0 - (time - 1.66) * 27.0
+		actors[3].position.y = 578.0 - GECKO.GROUND_FEET_Y * 2.0 - (time - 1.66) * 27.0
 	actors[3]._process(DELTA)
 	frame += 1
 	if frame >= FRAMES:

@@ -1,0 +1,24 @@
+{
+  "result": "PASS",
+  "source_gecko_sha256": "a5ecc340a08031d95f90038ed7b4687e8671086961dc044d365e2d0d2197c8fc",
+  "source_unchanged_during_run": true,
+  "character": {
+    "headless": {
+      "checks": 1872,
+      "failures": 0,
+      "engine_errors": false
+    },
+    "native": {
+      "checks": 2092,
+      "failures": 0,
+      "engine_errors": false
+    }
+  },
+  "dense_cape_native_samples": 202,
+  "jagged_outfits": [
+    "shadow_jumper",
+    "ghost_dragon"
+  ],
+  "captures": "/workspace/work/v27-final-captures",
+  "limits": "Native Linux GL/Mesa; physical phone display FPS not measured"
+}

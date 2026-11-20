@@ -6,6 +6,16 @@
 
 Новая версия не меняет `progress_v3.json`, цены скинов или награды. Android использует прежний сертификат обновления. IPA предназначена для физического arm64 iPhone с iOS 14+ и локальной подписи. Windows — x64, с встроенным PCK и новой иконкой. Подробности установки: [mobile-export.md](mobile-export.md), проверки: [validation.md](validation.md).
 
+| Платформа | Загрузка | Размер, байт | SHA-256 |
+|---|---|---:|---|
+| Android | [GeckoRush-2.7.apk](https://github.com/pr1decheats/gecko-rush/releases/download/v2.7.0/GeckoRush-2.7.apk) | 56,401,780 | `9759b42e063c868db3ea9050b22a47f1d4c62301ef8eeec1f643dd77ee6ab993` |
+| iPhone | [GeckoRush-2.7-unsigned.ipa](https://github.com/pr1decheats/gecko-rush/releases/download/v2.7.0/GeckoRush-2.7-unsigned.ipa) | 33,763,709 | `5099b8eee6aac21501c563d16941c651832186d564ef5d24883776c3ff4c0265` |
+| Windows | [GeckoRush-2.7-Windows.zip](https://github.com/pr1decheats/gecko-rush/releases/download/v2.7.0/GeckoRush-2.7-Windows.zip) | 39,908,525 | `947cfde28cee73c9066239c57498cd62d7714d649c2b461632d36765f6e75c6e` |
+
+Все три пакета собраны и проверены. [iOS CI44718437165](https://github.com/pr1decheats/gecko-rush/actions/runs/44718437165) и [Windows CI44719111686](https://github.com/pr1decheats/gecko-rush/actions/runs/44719111686) используют source `f009e633f7c47175f201eb4a9eb47bbed4f5d4bc`. Проверены 51 MD5 записи PCK; все 13 compiled scripts и 8 ресурсов брендинга совпадают между Windows/Android/iPhone. Старых атласов персонажа в пакетах нет. IPA — unsigned arm64, iOS14 / SDK18.5. Windows EXE2.7.0.9 успешно выполнил360headless-кадров /6секунд симуляции на WindowsNT10.0.26100.0, exit0 без ERROR/SCRIPTERROR.
+
+Редакторный Godot на Linux дополнительно проверил реальный экспортированный PCK:153проверки,21образ, привязанный к пасти язык не длиннее105px при движении20000px и применение лимита240FPS. Нативная графика проверена отдельно; фактическиеFPS и физические телефоны не измерялись.
+
 ---
 
 ## Архив: версия 2.6 и более ранние выпуски

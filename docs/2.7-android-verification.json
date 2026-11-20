@@ -1,0 +1,35 @@
+{
+  "result": "PASS",
+  "filename": "GeckoRush-2.7.apk",
+  "version": "2.7.0",
+  "build": 9,
+  "size": 56401780,
+  "sha256": "9759b42e063c868db3ea9050b22a47f1d4c62301ef8eeec1f643dd77ee6ab993",
+  "certificate_matches_2_2": true,
+  "abis": [
+    "armeabi-v7a",
+    "arm64-v8a"
+  ],
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "zip_crc": "PASS",
+  "zip_elf_16kb": "PASS",
+  "permissions": [],
+  "debuggable": false,
+  "scripts": {
+    "scripts/environment.gdc": "fe09c0435339e82406d74110bb7333fdaa2af215c3791780411c5cba26530fbc",
+    "scripts/effects.gdc": "d433427e095bf09c22cf0ad376451074a4d4c020921e8e80f4710f833afc6fb2",
+    "scripts/l10n.gdc": "de328a79b4aef3873e064368ba61e6a5ba96c3de42fe3c9163e92268c1006f47",
+    "scripts/center_wall.gdc": "ddd704818d50aa7d7876d24d60217d5586324166f9cd08b95f0333eecfe6cc3d",
+    "scripts/ui.gdc": "c1b1124b9e22a48a6aaf62f3ad1cd4d16544d89806872b2e0832a3c80afa8a42",
+    "scripts/audio.gdc": "c952f5a46f65e813fe92b0e686efcce1d63992b3c3e8307f3714eefc0915d953",
+    "scripts/progress.gdc": "5744420e32f25613c6946799913b370b829224e562a756ee54a8fda1b1ba32df",
+    "scripts/android_refresh.gdc": "7358dc0d2c4ce92175a4e03bf0ea3eb8677d6d763010e7e4cf4bec495c5dbd2c",
+    "scripts/main.gdc": "8f950867d200afb8262b929a4ecfd582adf332c12ba88c35e615a806956a6e0a",
+    "scripts/boot.gdc": "9c59f577d5a6e3e62f38d5b12b5ff25a05d3cbb3613e7d8f5dc86cc2dc1fac56",
+    "scripts/tuning.gdc": "a319804f43e11da701a8e8f1f4223473dc9bbe76eb0d5f6146dcdf2dce397596",
+    "scripts/gecko.gdc": "3a00bd00b9e3401995dad8dfffadbed0d980025043b9d76856f9df9f818b40b3",
+    "scripts/course.gdc": "5f6f58d0bb6346ec9caa6a1ab8dab69781063ca11e4782414198febe60a4df9f"
+  },
+  "runtime_limit": "APK was not run on an Android device."
+}
